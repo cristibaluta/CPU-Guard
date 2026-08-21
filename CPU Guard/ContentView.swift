@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct CPUSparklineView: View {
     let values: [Double]
@@ -73,6 +74,15 @@ struct ContentView: View {
     @StateObject private var monitor = ProcessMonitor()
     @State private var sortOrder = [KeyPathComparator(\Process.name)]
 
+    private func canRevealInFinder(_ proc: Process) -> Bool {
+        proc.executablePath != "-" && FileManager.default.fileExists(atPath: proc.executablePath)
+    }
+
+    private func revealExecutableInFinder(_ proc: Process) {
+        guard canRevealInFinder(proc) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: proc.executablePath)])
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -98,8 +108,23 @@ struct ContentView: View {
                         }
                         .buttonStyle(.plain)
 
-                        Text(proc.name)
-                            .fontWeight(.medium)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(proc.name)
+                                .fontWeight(.medium)
+                            Text("PID \(proc.id)")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .frame(minHeight: 30)
+                    .contextMenu {
+                        Text("Parent: \(proc.parentName) (\(proc.parentPID))")
+                        Text("Path: \(proc.executablePath)")
+                        Divider()
+                        Button("Reveal Path in Finder") {
+                            revealExecutableInFinder(proc)
+                        }
+                        .disabled(!canRevealInFinder(proc))
                     }
                 }
                 .width(min: 100, ideal: 120)

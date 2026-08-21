@@ -13,6 +13,9 @@ import Combine
 struct Process: Identifiable {
     let id: Int32  // PID
     let name: String
+    let parentPID: Int32
+    let parentName: String
+    let executablePath: String
     var cpuUsage: Double
     var cpuHistory: [Double]
     var memoryMB: Double
@@ -41,7 +44,13 @@ class ProcessMonitor: ObservableObject {
 
     var filtered: [Process] {
         if searchText.isEmpty { return processes }
-        return processes.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+        return processes.filter {
+            $0.name.localizedCaseInsensitiveContains(searchText)
+            || $0.parentName.localizedCaseInsensitiveContains(searchText)
+            || $0.executablePath.localizedCaseInsensitiveContains(searchText)
+            || String($0.id).contains(searchText)
+            || String($0.parentPID).contains(searchText)
+        }
     }
 
     private func historyCPUScore(for process: Process) -> Double {
@@ -75,6 +84,22 @@ class ProcessMonitor: ObservableObject {
         var newCPUHistoryByPID: [Int32: [Double]] = [:]
         var newMemoryHistoryByPID: [Int32: [Double]] = [:]
 
+        // Build a PID->name map up front so we can label parent processes.
+        var nameByPID: [Int32: String] = [:]
+        for p in procs {
+            let pid = p.kp_proc.p_pid
+            guard pid > 0 else { continue }
+
+            let nameBytes = p.kp_proc.p_comm
+            let procName = withUnsafeBytes(of: nameBytes) { ptr -> String in
+                let buf = ptr.bindMemory(to: CChar.self)
+                return String(cString: buf.baseAddress!)
+            }
+            if !procName.isEmpty {
+                nameByPID[pid] = procName
+            }
+        }
+
         var updated: [Process] = []
         for p in procs {
             let pid = p.kp_proc.p_pid
@@ -88,6 +113,13 @@ class ProcessMonitor: ObservableObject {
             guard !name.isEmpty else {
                 continue
             }
+
+            let parentPID = p.kp_eproc.e_ppid
+            let parentName = nameByPID[parentPID] ?? "-"
+
+            var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            let pathLen = proc_pidpath(pid, &pathBuffer, UInt32(pathBuffer.count))
+            let executablePath = pathLen > 0 ? String(cString: pathBuffer) : "-"
 
             // Memory + CPU via proc_pidinfo
             var taskInfo = proc_taskinfo()
@@ -140,6 +172,9 @@ class ProcessMonitor: ObservableObject {
             let proc = Process(
                 id: pid,
                 name: name,
+                parentPID: parentPID,
+                parentName: parentName,
+                executablePath: executablePath,
                 cpuUsage: cpuPercent,
                 cpuHistory: cpuHistory,
                 memoryMB: memMB,
