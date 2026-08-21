@@ -13,7 +13,7 @@ struct CPUSparklineView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let points = values.suffix(300)
+            let points = values.suffix(60)
             let width = geo.size.width
             let height = geo.size.height
             let stepX = width / CGFloat(max(points.count - 1, 1))

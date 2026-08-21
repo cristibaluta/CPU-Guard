@@ -36,6 +36,9 @@ class ProcessMonitor: ObservableObject {
     private var memoryHistoryByPID: [Int32: [Double]] = [:]
     private var initialMemoryByPID: [Int32: Double] = [:]
     private var previousTimestamp: Date = Date()
+    private let sampleInterval: TimeInterval = 5.0
+    private let cpuHistoryLimit = 60     // 5 minutes at 5s cadence
+    private let memoryHistoryLimit = 300 // 25 minutes at 5s cadence
     private let secondsPerMachTick: Double = {
         var info = mach_timebase_info_data_t()
         mach_timebase_info(&info)
@@ -59,7 +62,7 @@ class ProcessMonitor: ObservableObject {
 
     func start() {
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: sampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.refresh()
             }
@@ -80,6 +83,8 @@ class ProcessMonitor: ObservableObject {
 
         let now = Date()
         let elapsed = now.timeIntervalSince(previousTimestamp)
+        // Only append history on timer cadence so chart windows map to real time.
+        let shouldRecordSample = previousCPUTimes.isEmpty || elapsed >= (sampleInterval * 0.9)
         var newCPUTimes: [Int32: UInt64] = [:]
         var newCPUHistoryByPID: [Int32: [Double]] = [:]
         var newMemoryHistoryByPID: [Int32: [Double]] = [:]
@@ -146,19 +151,21 @@ class ProcessMonitor: ObservableObject {
             // If proc_pidinfo fails (common for kernel_task, windowserver, etc.),
             // we still include the process but with hasMetrics = false.
 
-            // Keep a rolling 300-point history (about 25 minutes at 5s refresh).
             var cpuHistory = cpuHistoryByPID[pid] ?? []
-            cpuHistory.append(cpuPercent)
-            if cpuHistory.count > 300 {
-                cpuHistory.removeFirst(cpuHistory.count - 300)
+            if shouldRecordSample {
+                cpuHistory.append(cpuPercent)
+            }
+            if cpuHistory.count > cpuHistoryLimit {
+                cpuHistory.removeFirst(cpuHistory.count - cpuHistoryLimit)
             }
             newCPUHistoryByPID[pid] = cpuHistory
 
-            // Track memory history
             var memoryHistory = memoryHistoryByPID[pid] ?? []
-            memoryHistory.append(memMB)
-            if memoryHistory.count > 300 {
-                memoryHistory.removeFirst(memoryHistory.count - 300)
+            if shouldRecordSample {
+                memoryHistory.append(memMB)
+            }
+            if memoryHistory.count > memoryHistoryLimit {
+                memoryHistory.removeFirst(memoryHistory.count - memoryHistoryLimit)
             }
             newMemoryHistoryByPID[pid] = memoryHistory
 
