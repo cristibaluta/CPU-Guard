@@ -121,6 +121,7 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                    .contentShape(Rectangle())
                     .contextMenu {
                         Text("Parent: \(proc.parentName) (\(proc.parentPID))")
                         Text("Path: \(proc.executablePath)")
