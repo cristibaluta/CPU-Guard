@@ -10,9 +10,5 @@
     <string>HelperTool</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
-    <key>SMAuthorizedClients</key>
-    <array>
-        <string>identifier "ro.imagin.CPU-Guard" and anchor apple generic and certificate leaf[subject.CN] = "Mac Developer: Brendon Blackwell (X8M2CG34BT)" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */</string>
-    </array>
 </dict>
 </plist>

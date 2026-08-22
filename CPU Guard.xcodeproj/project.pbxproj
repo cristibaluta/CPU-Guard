@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		5679E802303A3A5000B08A35 /* CPU Guard XPCService.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = 5679E7F6303A3A5000B08A35 /* CPU Guard XPCService.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		5679E80A303A534100B08A35 /* CPU Guard Helper in CopyFiles */ = {isa = PBXBuildFile; fileRef = 5679E7DB303A14F900B08A35 /* CPU Guard Helper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		BEEF0002AAAA1111BBBB2222 /* ro.imagin.CPU-Guard-Helper.plist in Copy LaunchDaemons Plist */ = {isa = PBXBuildFile; fileRef = BEEF0001AAAA1111BBBB2222 /* ro.imagin.CPU-Guard-Helper.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -18,6 +19,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 5679E7F5303A3A5000B08A35;
 			remoteInfo = "CPU Guard XPCService";
+		};
+		BEEF0007AAAA1111BBBB2222 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6D48BBFD2FADBBB9001D28DB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5679E7DA303A14F900B08A35;
+			remoteInfo = "CPU Guard Helper";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -42,14 +50,26 @@
 			name = "Embed XPC Services";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		5679E808303A52B300B08A35 /* CopyFiles */ = {
+		5679E808303A52B300B08A35 /* Copy Helper Executable */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
-			dstPath = Contents/Library/LaunchServices;
-			dstSubfolderSpec = 1;
+			dstPath = "";
+			dstSubfolderSpec = 6;
 			files = (
 				5679E80A303A534100B08A35 /* CPU Guard Helper in CopyFiles */,
 			);
+			name = "Copy Helper Executable";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BEEF0003AAAA1111BBBB2222 /* Copy LaunchDaemons Plist */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Library/LaunchDaemons;
+			dstSubfolderSpec = 1;
+			files = (
+				BEEF0002AAAA1111BBBB2222 /* ro.imagin.CPU-Guard-Helper.plist in Copy LaunchDaemons Plist */,
+			);
+			name = "Copy LaunchDaemons Plist";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -58,6 +78,7 @@
 		5679E7DB303A14F900B08A35 /* CPU Guard Helper */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "CPU Guard Helper"; sourceTree = BUILT_PRODUCTS_DIR; };
 		5679E7F6303A3A5000B08A35 /* CPU Guard XPCService.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = "CPU Guard XPCService.xpc"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6D48BC052FADBBB9001D28DB /* CPU Guard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "CPU Guard.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		BEEF0001AAAA1111BBBB2222 /* ro.imagin.CPU-Guard-Helper.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "ro.imagin.CPU-Guard-Helper.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -134,8 +155,17 @@
 				6D48BC072FADBBB9001D28DB /* CPU Guard */,
 				5679E7DC303A14F900B08A35 /* CPU Guard Helper */,
 				5679E7F7303A3A5000B08A35 /* CPU Guard XPCService */,
+				BEEF0009AAAA1111BBBB2222 /* LaunchDaemons */,
 				6D48BC062FADBBB9001D28DB /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		BEEF0009AAAA1111BBBB2222 /* LaunchDaemons */ = {
+			isa = PBXGroup;
+			children = (
+				BEEF0001AAAA1111BBBB2222 /* ro.imagin.CPU-Guard-Helper.plist */,
+			);
+			path = LaunchDaemons;
 			sourceTree = "<group>";
 		};
 		6D48BC062FADBBB9001D28DB /* Products */ = {
@@ -180,7 +210,6 @@
 				5679E7F2303A3A5000B08A35 /* Sources */,
 				5679E7F3303A3A5000B08A35 /* Frameworks */,
 				5679E7F4303A3A5000B08A35 /* Resources */,
-				5679E808303A52B300B08A35 /* CopyFiles */,
 			);
 			buildRules = (
 			);
@@ -204,11 +233,14 @@
 				6D48BC022FADBBB9001D28DB /* Frameworks */,
 				6D48BC032FADBBB9001D28DB /* Resources */,
 				5679E807303A3A5000B08A35 /* Embed XPC Services */,
+				5679E808303A52B300B08A35 /* Copy Helper Executable */,
+				BEEF0003AAAA1111BBBB2222 /* Copy LaunchDaemons Plist */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				5679E801303A3A5000B08A35 /* PBXTargetDependency */,
+				BEEF0006AAAA1111BBBB2222 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				6D48BC072FADBBB9001D28DB /* CPU Guard */,
@@ -308,6 +340,11 @@
 			isa = PBXTargetDependency;
 			target = 5679E7F5303A3A5000B08A35 /* CPU Guard XPCService */;
 			targetProxy = 5679E800303A3A5000B08A35 /* PBXContainerItemProxy */;
+		};
+		BEEF0006AAAA1111BBBB2222 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5679E7DA303A14F900B08A35 /* CPU Guard Helper */;
+			targetProxy = BEEF0007AAAA1111BBBB2222 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -521,7 +558,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 5NHDC5EV44;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
@@ -542,7 +579,6 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "ro.imagin.CPU-Guard";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = YES;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
@@ -569,7 +605,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 5NHDC5EV44;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
@@ -590,7 +626,6 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "ro.imagin.CPU-Guard";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = YES;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;

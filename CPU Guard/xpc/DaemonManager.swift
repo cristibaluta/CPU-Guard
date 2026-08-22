@@ -25,11 +25,17 @@ class DaemonManager: ObservableObject {
         isRegistered = (service.status == .enabled)
     }
 
-    // Register / Install Daemon (Triggers macOS Authorization Prompt)
+    // Register / Install Daemon
     func registerDaemon() {
         do {
             try service.register()
             updateStatus()
+            // Registration can succeed while the daemon stays disabled until the
+            // user approves it in System Settings (this replaces the old
+            // SMJobBless authorization prompt).
+            if service.status == .requiresApproval {
+                SMAppService.openSystemSettingsLoginItems()
+            }
         } catch {
             print("Failed to register daemon: \(error.localizedDescription)")
         }
