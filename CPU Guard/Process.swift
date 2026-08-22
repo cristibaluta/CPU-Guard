@@ -39,6 +39,10 @@ class ProcessMonitor: ObservableObject {
     private var memoryHistoryByPID: [Int32: [Double]] = [:]
     private var initialMemoryByPID: [Int32: Double] = [:]
     private var pinnedPIDs: Set<Int32> = []
+    private var pinnedNames: Set<String> = {
+        let saved = UserDefaults.standard.stringArray(forKey: "pinnedProcessNames") ?? []
+        return Set(saved)
+    }()
     private var previousTimestamp: Date = Date()
     private let sampleInterval: TimeInterval = 5.0
     private let cpuHistoryLimit = 60     // 5 minutes at 5s cadence
@@ -186,7 +190,7 @@ class ProcessMonitor: ObservableObject {
             let initialMemory = initialMemoryByPID[pid] ?? memMB
 
             let isPaused = (Int32(p.kp_proc.p_stat) == SSTOP)
-            let isPinned = pinnedPIDs.contains(pid)
+            let isPinned = pinnedPIDs.contains(pid) || pinnedNames.contains(name)
             let proc = Process(
                 id: pid,
                 name: name,
@@ -208,6 +212,10 @@ class ProcessMonitor: ObservableObject {
         // Drop pins for processes that no longer exist to keep state tidy.
         let livePIDs = Set(updated.map(\.id))
         pinnedPIDs = pinnedPIDs.intersection(livePIDs)
+        // Sync pinnedNames to only live processes (by name) so stale names don't accumulate.
+        let liveNames = Set(updated.map(\.name))
+        pinnedNames = pinnedNames.intersection(liveNames)
+        UserDefaults.standard.set(Array(pinnedNames), forKey: "pinnedProcessNames")
 
         previousCPUTimes = newCPUTimes
         cpuHistoryByPID = newCPUHistoryByPID
@@ -233,11 +241,14 @@ class ProcessMonitor: ObservableObject {
     }
 
     func togglePin(_ process: Process) {
-        if pinnedPIDs.contains(process.id) {
+        if pinnedNames.contains(process.name) {
+            pinnedNames.remove(process.name)
             pinnedPIDs.remove(process.id)
         } else {
+            pinnedNames.insert(process.name)
             pinnedPIDs.insert(process.id)
         }
+        UserDefaults.standard.set(Array(pinnedNames), forKey: "pinnedProcessNames")
         refresh()
     }
 }
