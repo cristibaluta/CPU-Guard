@@ -72,7 +72,27 @@ struct MemorySparklineView: View {
 
 struct ContentView: View {
     @StateObject private var monitor = ProcessMonitor()
-    @State private var sortOrder = [KeyPathComparator(\Process.name)]
+    @State private var userSortOrder: [KeyPathComparator<Process>] = []
+
+    private var pinnedComparator: KeyPathComparator<Process> {
+        KeyPathComparator(\Process.pinSortRank, order: .reverse)
+    }
+
+    private var pausedComparator: KeyPathComparator<Process> {
+        KeyPathComparator(\Process.pauseSortRank, order: .reverse)
+    }
+
+    private var displayedProcesses: [Process] {
+        if userSortOrder.isEmpty {
+            // Keep original monitor order (CPU-history-based) within each priority bucket.
+            let pinned = monitor.filtered.filter { $0.isPinned }
+            let paused = monitor.filtered.filter { !$0.isPinned && $0.isPaused }
+            let normal = monitor.filtered.filter { !$0.isPinned && !$0.isPaused }
+            return pinned + paused + normal
+        }
+
+        return monitor.filtered.sorted(using: [pinnedComparator, pausedComparator] + userSortOrder)
+    }
 
     private func canRevealInFinder(_ proc: Process) -> Bool {
         proc.executablePath != "-" && FileManager.default.fileExists(atPath: proc.executablePath)
@@ -96,7 +116,7 @@ struct ContentView: View {
 
             Divider()
 
-            Table(monitor.filtered, sortOrder: $sortOrder) {
+            Table(displayedProcesses, sortOrder: $userSortOrder) {
                 TableColumn("Name", value: \.name) { proc in
                     HStack(spacing: 8) {
                         Button {
@@ -125,6 +145,10 @@ struct ContentView: View {
                     .contextMenu {
                         Text("Parent: \(proc.parentName) (\(proc.parentPID))")
                         Text("Path: \(proc.executablePath)")
+                        Divider()
+                        Button(proc.isPinned ? "Unpin" : "Pin") {
+                            monitor.togglePin(proc)
+                        }
                         Divider()
                         Button("Reveal Path in Finder") {
                             revealExecutableInFinder(proc)

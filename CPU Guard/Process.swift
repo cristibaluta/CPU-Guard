@@ -22,8 +22,11 @@ struct Process: Identifiable {
     var memoryHistory: [Double]
     var initialMemoryMB: Double  // Memory when first seen
     var isPaused: Bool
+    var isPinned: Bool
     var hasMetrics: Bool  // True if proc_pidinfo succeeded
     var status: String { isPaused ? "Paused" : "Running" }
+    var pinSortRank: Int { isPinned ? 1 : 0 }
+    var pauseSortRank: Int { isPaused ? 1 : 0 }
 }
 
 @MainActor
@@ -35,6 +38,7 @@ class ProcessMonitor: ObservableObject {
     private var cpuHistoryByPID: [Int32: [Double]] = [:]
     private var memoryHistoryByPID: [Int32: [Double]] = [:]
     private var initialMemoryByPID: [Int32: Double] = [:]
+    private var pinnedPIDs: Set<Int32> = []
     private var previousTimestamp: Date = Date()
     private let sampleInterval: TimeInterval = 5.0
     private let cpuHistoryLimit = 60     // 5 minutes at 5s cadence
@@ -182,6 +186,7 @@ class ProcessMonitor: ObservableObject {
             let initialMemory = initialMemoryByPID[pid] ?? memMB
 
             let isPaused = (Int32(p.kp_proc.p_stat) == SSTOP)
+            let isPinned = pinnedPIDs.contains(pid)
             let proc = Process(
                 id: pid,
                 name: name,
@@ -194,10 +199,15 @@ class ProcessMonitor: ObservableObject {
                 memoryHistory: memoryHistory,
                 initialMemoryMB: initialMemory,
                 isPaused: isPaused,
+                isPinned: isPinned,
                 hasMetrics: hasMetrics
             )
             updated.append(proc)
         }
+
+        // Drop pins for processes that no longer exist to keep state tidy.
+        let livePIDs = Set(updated.map(\.id))
+        pinnedPIDs = pinnedPIDs.intersection(livePIDs)
 
         previousCPUTimes = newCPUTimes
         cpuHistoryByPID = newCPUHistoryByPID
@@ -220,5 +230,14 @@ class ProcessMonitor: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             self.refresh()
         }
+    }
+
+    func togglePin(_ process: Process) {
+        if pinnedPIDs.contains(process.id) {
+            pinnedPIDs.remove(process.id)
+        } else {
+            pinnedPIDs.insert(process.id)
+        }
+        refresh()
     }
 }
