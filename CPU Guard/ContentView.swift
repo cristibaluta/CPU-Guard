@@ -111,12 +111,16 @@ struct ContentView: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(proc.name)
                                 .fontWeight(.medium)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                             Text("PID \(proc.id)")
                                 .font(.system(size: 10))
                                 .foregroundColor(.secondary)
+                                .lineLimit(1)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(minHeight: 30)
+                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
                     .contextMenu {
                         Text("Parent: \(proc.parentName) (\(proc.parentPID))")
                         Text("Path: \(proc.executablePath)")

@@ -89,19 +89,33 @@ class ProcessMonitor: ObservableObject {
         var newCPUHistoryByPID: [Int32: [Double]] = [:]
         var newMemoryHistoryByPID: [Int32: [Double]] = [:]
 
-        // Build a PID->name map up front so we can label parent processes.
+        // Build PID->name/path maps up front so we can label parent processes.
         var nameByPID: [Int32: String] = [:]
+        var executablePathByPID: [Int32: String] = [:]
         for p in procs {
             let pid = p.kp_proc.p_pid
             guard pid > 0 else { continue }
 
             let nameBytes = p.kp_proc.p_comm
-            let procName = withUnsafeBytes(of: nameBytes) { ptr -> String in
+            let kernelName = withUnsafeBytes(of: nameBytes) { ptr -> String in
                 let buf = ptr.bindMemory(to: CChar.self)
                 return String(cString: buf.baseAddress!)
             }
-            if !procName.isEmpty {
-                nameByPID[pid] = procName
+
+            var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            let pathLen = proc_pidpath(pid, &pathBuffer, UInt32(pathBuffer.count))
+            let executablePath = pathLen > 0 ? String(cString: pathBuffer) : "-"
+            executablePathByPID[pid] = executablePath
+
+            let displayName: String
+            if executablePath != "-" {
+                displayName = URL(fileURLWithPath: executablePath).lastPathComponent
+            } else {
+                displayName = kernelName
+            }
+
+            if !displayName.isEmpty {
+                nameByPID[pid] = displayName
             }
         }
 
@@ -110,21 +124,13 @@ class ProcessMonitor: ObservableObject {
             let pid = p.kp_proc.p_pid
             guard pid > 0 else { continue }
 
-            let nameBytes = p.kp_proc.p_comm
-            let name = withUnsafeBytes(of: nameBytes) { ptr -> String in
-                let buf = ptr.bindMemory(to: CChar.self)
-                return String(cString: buf.baseAddress!)
-            }
-            guard !name.isEmpty else {
+            guard let name = nameByPID[pid], !name.isEmpty else {
                 continue
             }
 
             let parentPID = p.kp_eproc.e_ppid
             let parentName = nameByPID[parentPID] ?? "-"
-
-            var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-            let pathLen = proc_pidpath(pid, &pathBuffer, UInt32(pathBuffer.count))
-            let executablePath = pathLen > 0 ? String(cString: pathBuffer) : "-"
+            let executablePath = executablePathByPID[pid] ?? "-"
 
             // Memory + CPU via proc_pidinfo
             var taskInfo = proc_taskinfo()
