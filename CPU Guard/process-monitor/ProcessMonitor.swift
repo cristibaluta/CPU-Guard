@@ -40,6 +40,17 @@ class ProcessMonitor: ObservableObject {
         return (Double(info.numer) / Double(info.denom)) / 1_000_000_000.0
     }()
 
+    // Privileged helper fallback: proc_pidinfo fails for processes owned by other users
+    // (WindowServer, kernel daemons, etc.) unless we ask the root daemon. Ticks returned by
+    // the helper are tracked separately from `previousCPUTimes` since they're only ever
+    // populated for pids the unprivileged path can't read.
+    private let daemonManager: DaemonManager?
+    private var previousHelperCPUTimes: [Int32: Double] = [:]
+
+    init(daemonManager: DaemonManager? = nil) {
+        self.daemonManager = daemonManager
+    }
+
     var filtered: [Process] {
         if searchText.isEmpty { return processes }
         return processes.filter {
@@ -179,13 +190,7 @@ class ProcessMonitor: ObservableObject {
             let initialMemory = initialMemoryByPID[pid] ?? memMB
 
             // Resource hog detection: 1 sample at 5s cadence = 5s sustained > 10% CPU.
-            if shouldRecordSample {
-                if cpuPercent > cpuMinHogPercent && hasMetrics {
-                    hogSamplesByPID[pid] = (hogSamplesByPID[pid] ?? 0) + 1
-                } else {
-                    hogSamplesByPID[pid] = 0
-                }
-            }
+            registerHogSample(pid: pid, cpuPercent: cpuPercent, hasMetrics: hasMetrics, shouldRecordSample: shouldRecordSample)
             let isResourceHog = (hogSamplesByPID[pid] ?? 0) >= 1
 
             let isPaused = (Int32(p.kp_proc.p_stat) == SSTOP)
@@ -217,19 +222,7 @@ class ProcessMonitor: ObservableObject {
         pinnedNames = pinnedNames.intersection(liveNames)
         UserDefaults.standard.set(Array(pinnedNames), forKey: "pinnedProcessNames")
         hogSamplesByPID = hogSamplesByPID.filter { livePIDs.contains($0.key) }
-
-        // Update resource hogs and fire callbacks.
-        let newHogs = updated.filter { $0.isResourceHog }
-        let newHogNames = Set(newHogs.map(\.name))
-        let prevHogNames = Set(resourceHogs.map(\.name))
-        let allHogsCleared = newHogs.isEmpty && !resourceHogs.isEmpty
-        resourceHogs = newHogs
-        if !newHogNames.subtracting(prevHogNames).isEmpty {
-            onNewHogDetected?()
-        }
-        if allHogsCleared {
-            onResourceHogsCleared?()
-        }
+        previousHelperCPUTimes = previousHelperCPUTimes.filter { livePIDs.contains($0.key) }
 
         previousCPUTimes = newCPUTimes
         cpuHistoryByPID = newCPUHistoryByPID
@@ -243,6 +236,87 @@ class ProcessMonitor: ObservableObject {
                 return $0.cpuUsage > $1.cpuUsage
             }
             return lhsScore > rhsScore
+        }
+        refreshHogAggregates()
+
+        // proc_pidinfo fails for processes we don't own (WindowServer, root daemons, ...).
+        // Ask the privileged helper for those specifically, in one batched round trip.
+        let missingPIDs = updated.filter { !$0.hasMetrics }.map(\.id)
+        if let daemonManager, !missingPIDs.isEmpty {
+            daemonManager.fetchTaskInfo(forPIDs: missingPIDs) { [weak self] results in
+                self?.applyHelperResults(results, elapsed: elapsed, shouldRecordSample: shouldRecordSample)
+            }
+        }
+    }
+
+    /// Patches in CPU/memory for processes the unprivileged pass above couldn't read, using
+    /// results from the privileged helper daemon. Runs after `refresh()`'s synchronous pass
+    /// already published `processes`, so this updates entries in place rather than rebuilding
+    /// the array, and overwrites the placeholder (0%, not-yet-a-hog) values that pass recorded
+    /// for these pids.
+    private func applyHelperResults(_ results: [Int32: (cpuTicks: Double, residentBytes: Double)],
+                                     elapsed: TimeInterval,
+                                     shouldRecordSample: Bool) {
+        guard !results.isEmpty else { return }
+
+        for (pid, info) in results {
+            guard let index = processes.firstIndex(where: { $0.id == pid }) else { continue }
+
+            let memMB = info.residentBytes / 1_048_576.0
+            var cpuPercent = 0.0
+            if let prevTicks = previousHelperCPUTimes[pid], elapsed > 0 {
+                let deltaSeconds = (info.cpuTicks - prevTicks) * secondsPerMachTick
+                cpuPercent = max(0, deltaSeconds / elapsed) * 100.0
+            }
+            previousHelperCPUTimes[pid] = info.cpuTicks
+
+            processes[index].hasMetrics = true
+            processes[index].cpuUsage = cpuPercent
+            processes[index].memoryMB = memMB
+
+            if initialMemoryByPID[pid] == nil {
+                initialMemoryByPID[pid] = memMB
+            }
+            processes[index].initialMemoryMB = initialMemoryByPID[pid] ?? memMB
+
+            if shouldRecordSample {
+                // The synchronous pass already appended a 0 placeholder for this pid; replace
+                // it rather than appending again now that we have a real reading.
+                if !processes[index].cpuHistory.isEmpty {
+                    processes[index].cpuHistory[processes[index].cpuHistory.count - 1] = cpuPercent
+                }
+                if !processes[index].memoryHistory.isEmpty {
+                    processes[index].memoryHistory[processes[index].memoryHistory.count - 1] = memMB
+                }
+            }
+
+            registerHogSample(pid: pid, cpuPercent: cpuPercent, hasMetrics: true, shouldRecordSample: shouldRecordSample)
+            processes[index].isResourceHog = (hogSamplesByPID[pid] ?? 0) >= 1
+        }
+
+        refreshHogAggregates()
+    }
+
+    private func registerHogSample(pid: Int32, cpuPercent: Double, hasMetrics: Bool, shouldRecordSample: Bool) {
+        guard shouldRecordSample else { return }
+        if cpuPercent > cpuMinHogPercent && hasMetrics {
+            hogSamplesByPID[pid] = (hogSamplesByPID[pid] ?? 0) + 1
+        } else {
+            hogSamplesByPID[pid] = 0
+        }
+    }
+
+    private func refreshHogAggregates() {
+        let newHogs = processes.filter { $0.isResourceHog }
+        let newHogNames = Set(newHogs.map(\.name))
+        let prevHogNames = Set(resourceHogs.map(\.name))
+        let allHogsCleared = newHogs.isEmpty && !resourceHogs.isEmpty
+        resourceHogs = newHogs
+        if !newHogNames.subtracting(prevHogNames).isEmpty {
+            onNewHogDetected?()
+        }
+        if allHogsCleared {
+            onResourceHogsCleared?()
         }
     }
 

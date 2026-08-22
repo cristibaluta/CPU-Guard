@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		5679E802303A3A5000B08A35 /* CPU Guard XPCService.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = 5679E7F6303A3A5000B08A35 /* CPU Guard XPCService.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		5679E80A303A534100B08A35 /* CPU Guard Helper in CopyFiles */ = {isa = PBXBuildFile; fileRef = 5679E7DB303A14F900B08A35 /* CPU Guard Helper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		5679E80A303A534100B08A35 /* CPU Guard Helper in Copy Helper Executable */ = {isa = PBXBuildFile; fileRef = 5679E7DB303A14F900B08A35 /* CPU Guard Helper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		BEEF0002AAAA1111BBBB2222 /* ro.imagin.CPU-Guard-Helper.plist in Copy LaunchDaemons Plist */ = {isa = PBXBuildFile; fileRef = BEEF0001AAAA1111BBBB2222 /* ro.imagin.CPU-Guard-Helper.plist */; };
 /* End PBXBuildFile section */
 
@@ -56,7 +56,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 6;
 			files = (
-				5679E80A303A534100B08A35 /* CPU Guard Helper in CopyFiles */,
+				5679E80A303A534100B08A35 /* CPU Guard Helper in Copy Helper Executable */,
 			);
 			name = "Copy Helper Executable";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -87,7 +87,6 @@
 			membershipExceptions = (
 				xpc/DaemonManager.swift,
 				xpc/HelperDaemonProtocol.swift,
-				xpc/ProcessMonitorView.swift,
 			);
 			target = 5679E7DA303A14F900B08A35 /* CPU Guard Helper */;
 		};
@@ -160,14 +159,6 @@
 			);
 			sourceTree = "<group>";
 		};
-		BEEF0009AAAA1111BBBB2222 /* LaunchDaemons */ = {
-			isa = PBXGroup;
-			children = (
-				BEEF0001AAAA1111BBBB2222 /* ro.imagin.CPU-Guard-Helper.plist */,
-			);
-			path = LaunchDaemons;
-			sourceTree = "<group>";
-		};
 		6D48BC062FADBBB9001D28DB /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -176,6 +167,14 @@
 				5679E7F6303A3A5000B08A35 /* CPU Guard XPCService.xpc */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		BEEF0009AAAA1111BBBB2222 /* LaunchDaemons */ = {
+			isa = PBXGroup;
+			children = (
+				BEEF0001AAAA1111BBBB2222 /* ro.imagin.CPU-Guard-Helper.plist */,
+			);
+			path = LaunchDaemons;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

@@ -8,35 +8,40 @@
 import SwiftUI
 
 struct ProcessMonitorView: View {
-    @StateObject private var daemonManager = DaemonManager()
+    @ObservedObject var monitor: ProcessMonitor
+    @ObservedObject var daemonManager: DaemonManager
 
     var body: some View {
-        VStack(spacing: 16) {
-            Text("Daemon Status: \(daemonManager.isRegistered ? "Active" : "Not Registered")")
-                .font(.headline)
-
+        VStack(spacing: 0) {
             HStack {
-                Button("Register Helper") {
-                    daemonManager.registerDaemon()
-                }
-                .disabled(daemonManager.isRegistered)
+                Circle()
+                    .fill(daemonManager.isRegistered ? Color.green : Color.secondary)
+                    .frame(width: 8, height: 8)
+                Text(daemonManager.isRegistered ? "Helper Active" : "Helper Not Registered")
+                    .font(.subheadline)
 
-                Button("Unregister Helper") {
-                    daemonManager.unregisterDaemon()
+                Spacer()
+
+                if daemonManager.isRegistered {
+                    Button("Unregister Helper") {
+                        daemonManager.unregisterDaemon()
+                    }
+                } else {
+                    Button("Register Helper") {
+                        daemonManager.registerDaemon()
+                    }
                 }
-                .disabled(!daemonManager.isRegistered)
             }
+            .padding(8)
+            .background(Color(NSColor.controlBackgroundColor))
 
             Divider()
 
-            Button("Query WindowServer Metrics (PID 88)") {
-                daemonManager.fetchCPU(for: 88)
-            }
-            .disabled(!daemonManager.isRegistered)
-
-            Text("CPU Ticks: \(daemonManager.lastCpuResult)")
+            // The real process table. Rows the app can't read directly (WindowServer, etc.)
+            // get filled in by the privileged helper once it's registered — see
+            // ProcessMonitor.applyHelperResults.
+            ContentView(monitor: monitor)
         }
-        .padding()
-        .frame(width: 400, height: 250)
+        .frame(width: 800, height: 360)
     }
 }

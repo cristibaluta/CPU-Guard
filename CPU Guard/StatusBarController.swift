@@ -13,10 +13,12 @@ import ServiceManagement
 final class StatusBarController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
-    private let monitor = ProcessMonitor()
+    private let daemonManager = DaemonManager()
+    private let monitor: ProcessMonitor
     private var hogPanel: NSPanel?
 
     override init() {
+        monitor = ProcessMonitor(daemonManager: daemonManager)
         super.init()
         monitor.start()
         configureStatusItem()
@@ -57,7 +59,7 @@ final class StatusBarController: NSObject {
         popover.behavior = .applicationDefined
         popover.contentSize = NSSize(width: 800, height: 360)
 //        popover.contentViewController = NSHostingController(rootView: ContentView(monitor: monitor))
-        popover.contentViewController = NSHostingController(rootView: ProcessMonitorView())
+        popover.contentViewController = NSHostingController(rootView: ProcessMonitorView(monitor: monitor, daemonManager: daemonManager))
     }
 
     private func setupHogPanel() {
