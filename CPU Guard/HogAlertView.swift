@@ -9,14 +9,6 @@ struct HogAlertView: View {
     @ObservedObject var monitor: ProcessMonitor
     var onDismiss: () -> Void
 
-    @State private var sortOrder: [KeyPathComparator<Process>] = []
-
-    private var displayedHogs: [Process] {
-        sortOrder.isEmpty
-            ? monitor.resourceHogs
-            : monitor.resourceHogs.sorted(using: sortOrder)
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             // Header bar
@@ -44,51 +36,57 @@ struct HogAlertView: View {
 
             Divider()
 
-            Table(displayedHogs, sortOrder: $sortOrder) {
-                TableColumn("Name", value: \.name) { proc in
-                    HStack(spacing: 6) {
-                        Button { monitor.togglePause(proc) } label: {
-                            Image(systemName: proc.isPaused ? "play.circle.fill" : "pause.circle.fill")
-                                .foregroundColor(proc.isPaused ? .green : .orange)
-                                .font(.system(size: 13))
-                        }
-                        .buttonStyle(.plain)
-
-                        Text(proc.name)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+            // Process rows — no header row
+            VStack(spacing: 0) {
+                ForEach(monitor.resourceHogs) { proc in
+                    HogRowView(proc: proc, monitor: monitor)
+                    if proc.id != monitor.resourceHogs.last?.id {
+                        Divider().padding(.leading, 12)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
                 }
-                .width(min: 80, ideal: 140)
-
-                TableColumn("CPU", value: \.cpuUsage) { proc in
-                    Text(String(format: "%.1f%%", proc.cpuUsage))
-                        .foregroundColor(proc.cpuUsage > 50 ? .red : .orange)
-                        .fontWeight(.medium)
-                }
-                .width(50)
-
-                TableColumn("5m CPU") { proc in
-                    CPUSparklineView(values: proc.cpuHistory)
-                }
-                .width(130)
-
-                TableColumn("Memory", value: \.memoryMB) { proc in
-                    Text(String(format: "%.1f MB", proc.memoryMB))
-                        .font(.system(size: 11))
-                }
-                .width(75)
-
-                TableColumn("Mem 25m") { proc in
-                    MemorySparklineView(values: proc.memoryHistory)
-                }
-                .width(130)
             }
         }
         .background(Color(NSColor.windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+struct HogRowView: View {
+    let proc: Process
+    let monitor: ProcessMonitor
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button { monitor.togglePause(proc) } label: {
+                Image(systemName: proc.isPaused ? "play.circle.fill" : "pause.circle.fill")
+                    .foregroundColor(proc.isPaused ? .green : .orange)
+                    .font(.system(size: 13))
+            }
+            .buttonStyle(.plain)
+
+            Text(proc.name)
+                .fontWeight(.medium)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(minWidth: 80, idealWidth: 140, maxWidth: .infinity, alignment: .leading)
+
+            Text(String(format: "%.1f%%", proc.cpuUsage))
+                .foregroundColor(proc.cpuUsage > 50 ? .red : .orange)
+                .fontWeight(.medium)
+                .frame(width: 50, alignment: .trailing)
+
+            CPUSparklineView(values: proc.cpuHistory)
+                .frame(width: 130, height: 24)
+
+            Text(String(format: "%.1f MB", proc.memoryMB))
+                .font(.system(size: 11))
+                .frame(width: 75, alignment: .trailing)
+
+            MemorySparklineView(values: proc.memoryHistory)
+                .frame(width: 130, height: 24)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
 }

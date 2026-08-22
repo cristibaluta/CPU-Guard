@@ -72,10 +72,9 @@ final class StatusBarController: NSObject {
         guard let panel = hogPanel, let screen = NSScreen.main else { return }
 
         let hogCount = max(monitor.resourceHogs.count, 1)
-        let headerH: CGFloat = 36
-        let tableHeaderH: CGFloat = 28
-        let rowH: CGFloat = 44
-        let panelHeight = min(max(headerH + tableHeaderH + rowH * CGFloat(hogCount), 180), 380)
+        let headerH: CGFloat = 36    // alert header bar
+        let rowH: CGFloat = 48       // each process row (padding + content + divider)
+        let panelHeight = min(headerH + rowH * CGFloat(hogCount) + 1, 380)
         let panelWidth: CGFloat = 620
 
         // Position just below the menu bar, horizontally near the status item.
