@@ -5,30 +5,9 @@
 //  Created by Cristian Baluta on 08/05/2026.
 //
 
-
 import Foundation
 import Darwin
 import Combine
-
-struct Process: Identifiable {
-    let id: Int32  // PID
-    let name: String
-    let parentPID: Int32
-    let parentName: String
-    let executablePath: String
-    var cpuUsage: Double
-    var cpuHistory: [Double]
-    var memoryMB: Double
-    var memoryHistory: [Double]
-    var initialMemoryMB: Double  // Memory when first seen
-    var isPaused: Bool
-    var isPinned: Bool
-    var isResourceHog: Bool
-    var hasMetrics: Bool  // True if proc_pidinfo succeeded
-    var status: String { isPaused ? "Paused" : "Running" }
-    var pinSortRank: Int { isPinned ? 1 : 0 }
-    var pauseSortRank: Int { isPaused ? 1 : 0 }
-}
 
 @MainActor
 class ProcessMonitor: ObservableObject {
@@ -54,6 +33,7 @@ class ProcessMonitor: ObservableObject {
     private let sampleInterval: TimeInterval = 5.0
     private let cpuHistoryLimit = 60     // 5 minutes at 5s cadence
     private let memoryHistoryLimit = 300 // 25 minutes at 5s cadence
+    private let cpuMinHogPercent = 50.0
     private let secondsPerMachTick: Double = {
         var info = mach_timebase_info_data_t()
         mach_timebase_info(&info)
@@ -109,7 +89,9 @@ class ProcessMonitor: ObservableObject {
         var executablePathByPID: [Int32: String] = [:]
         for p in procs {
             let pid = p.kp_proc.p_pid
-            guard pid > 0 else { continue }
+            guard pid > 0 else {
+                continue
+            }
 
             let nameBytes = p.kp_proc.p_comm
             let kernelName = withUnsafeBytes(of: nameBytes) { ptr -> String in
@@ -198,7 +180,7 @@ class ProcessMonitor: ObservableObject {
 
             // Resource hog detection: 1 sample at 5s cadence = 5s sustained > 10% CPU.
             if shouldRecordSample {
-                if cpuPercent > 10.0 && hasMetrics {
+                if cpuPercent > cpuMinHogPercent && hasMetrics {
                     hogSamplesByPID[pid] = (hogSamplesByPID[pid] ?? 0) + 1
                 } else {
                     hogSamplesByPID[pid] = 0
