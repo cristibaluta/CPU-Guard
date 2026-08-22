@@ -9,6 +9,7 @@ import SwiftUI
 import AppKit
 import ServiceManagement
 
+@MainActor
 final class StatusBarController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
