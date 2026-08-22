@@ -6,19 +6,118 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		5679E802303A3A5000B08A35 /* CPU Guard XPCService.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = 5679E7F6303A3A5000B08A35 /* CPU Guard XPCService.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5679E80A303A534100B08A35 /* CPU Guard Helper in CopyFiles */ = {isa = PBXBuildFile; fileRef = 5679E7DB303A14F900B08A35 /* CPU Guard Helper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		5679E800303A3A5000B08A35 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6D48BBFD2FADBBB9001D28DB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5679E7F5303A3A5000B08A35;
+			remoteInfo = "CPU Guard XPCService";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		5679E7D9303A14F900B08A35 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		5679E807303A3A5000B08A35 /* Embed XPC Services */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/XPCServices";
+			dstSubfolderSpec = 16;
+			files = (
+				5679E802303A3A5000B08A35 /* CPU Guard XPCService.xpc in Embed XPC Services */,
+			);
+			name = "Embed XPC Services";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5679E808303A52B300B08A35 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Library/LaunchServices;
+			dstSubfolderSpec = 1;
+			files = (
+				5679E80A303A534100B08A35 /* CPU Guard Helper in CopyFiles */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		5679E7DB303A14F900B08A35 /* CPU Guard Helper */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "CPU Guard Helper"; sourceTree = BUILT_PRODUCTS_DIR; };
+		5679E7F6303A3A5000B08A35 /* CPU Guard XPCService.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = "CPU Guard XPCService.xpc"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6D48BC052FADBBB9001D28DB /* CPU Guard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "CPU Guard.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		5679E7E5303A151900B08A35 /* Exceptions for "CPU Guard" folder in "CPU Guard Helper" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				xpc/DaemonManager.swift,
+				xpc/HelperDaemonProtocol.swift,
+				xpc/ProcessMonitorView.swift,
+			);
+			target = 5679E7DA303A14F900B08A35 /* CPU Guard Helper */;
+		};
+		5679E803303A3A5000B08A35 /* Exceptions for "CPU Guard XPCService" folder in "CPU Guard XPCService" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 5679E7F5303A3A5000B08A35 /* CPU Guard XPCService */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		5679E7DC303A14F900B08A35 /* CPU Guard Helper */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "CPU Guard Helper";
+			sourceTree = "<group>";
+		};
+		5679E7F7303A3A5000B08A35 /* CPU Guard XPCService */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5679E803303A3A5000B08A35 /* Exceptions for "CPU Guard XPCService" folder in "CPU Guard XPCService" target */,
+			);
+			path = "CPU Guard XPCService";
+			sourceTree = "<group>";
+		};
 		6D48BC072FADBBB9001D28DB /* CPU Guard */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5679E7E5303A151900B08A35 /* Exceptions for "CPU Guard" folder in "CPU Guard Helper" target */,
+			);
 			path = "CPU Guard";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		5679E7D8303A14F900B08A35 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5679E7F3303A3A5000B08A35 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6D48BC022FADBBB9001D28DB /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -33,6 +132,8 @@
 			isa = PBXGroup;
 			children = (
 				6D48BC072FADBBB9001D28DB /* CPU Guard */,
+				5679E7DC303A14F900B08A35 /* CPU Guard Helper */,
+				5679E7F7303A3A5000B08A35 /* CPU Guard XPCService */,
 				6D48BC062FADBBB9001D28DB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +142,8 @@
 			isa = PBXGroup;
 			children = (
 				6D48BC052FADBBB9001D28DB /* CPU Guard.app */,
+				5679E7DB303A14F900B08A35 /* CPU Guard Helper */,
+				5679E7F6303A3A5000B08A35 /* CPU Guard XPCService.xpc */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,6 +151,51 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		5679E7DA303A14F900B08A35 /* CPU Guard Helper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5679E7DF303A14F900B08A35 /* Build configuration list for PBXNativeTarget "CPU Guard Helper" */;
+			buildPhases = (
+				5679E7D7303A14F900B08A35 /* Sources */,
+				5679E7D8303A14F900B08A35 /* Frameworks */,
+				5679E7D9303A14F900B08A35 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5679E7DC303A14F900B08A35 /* CPU Guard Helper */,
+			);
+			name = "CPU Guard Helper";
+			packageProductDependencies = (
+			);
+			productName = "CPU Guard Helper";
+			productReference = 5679E7DB303A14F900B08A35 /* CPU Guard Helper */;
+			productType = "com.apple.product-type.tool";
+		};
+		5679E7F5303A3A5000B08A35 /* CPU Guard XPCService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5679E804303A3A5000B08A35 /* Build configuration list for PBXNativeTarget "CPU Guard XPCService" */;
+			buildPhases = (
+				5679E7F2303A3A5000B08A35 /* Sources */,
+				5679E7F3303A3A5000B08A35 /* Frameworks */,
+				5679E7F4303A3A5000B08A35 /* Resources */,
+				5679E808303A52B300B08A35 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5679E7F7303A3A5000B08A35 /* CPU Guard XPCService */,
+			);
+			name = "CPU Guard XPCService";
+			packageProductDependencies = (
+			);
+			productName = "CPU Guard XPCService";
+			productReference = 5679E7F6303A3A5000B08A35 /* CPU Guard XPCService.xpc */;
+			productType = "com.apple.product-type.xpc-service";
+		};
 		6D48BC042FADBBB9001D28DB /* CPU Guard */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 6D48BC102FADBBBC001D28DB /* Build configuration list for PBXNativeTarget "CPU Guard" */;
@@ -55,10 +203,12 @@
 				6D48BC012FADBBB9001D28DB /* Sources */,
 				6D48BC022FADBBB9001D28DB /* Frameworks */,
 				6D48BC032FADBBB9001D28DB /* Resources */,
+				5679E807303A3A5000B08A35 /* Embed XPC Services */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				5679E801303A3A5000B08A35 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				6D48BC072FADBBB9001D28DB /* CPU Guard */,
@@ -77,9 +227,15 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2630;
+				LastSwiftUpdateCheck = 1640;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
+					5679E7DA303A14F900B08A35 = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					5679E7F5303A3A5000B08A35 = {
+						CreatedOnToolsVersion = 16.4;
+					};
 					6D48BC042FADBBB9001D28DB = {
 						CreatedOnToolsVersion = 26.3;
 					};
@@ -100,11 +256,20 @@
 			projectRoot = "";
 			targets = (
 				6D48BC042FADBBB9001D28DB /* CPU Guard */,
+				5679E7F5303A3A5000B08A35 /* CPU Guard XPCService */,
+				5679E7DA303A14F900B08A35 /* CPU Guard Helper */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		5679E7F4303A3A5000B08A35 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6D48BC032FADBBB9001D28DB /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -115,6 +280,20 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		5679E7D7303A14F900B08A35 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5679E7F2303A3A5000B08A35 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6D48BC012FADBBB9001D28DB /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -124,7 +303,89 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		5679E801303A3A5000B08A35 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5679E7F5303A3A5000B08A35 /* CPU Guard XPCService */;
+			targetProxy = 5679E800303A3A5000B08A35 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		5679E7E0303A14F900B08A35 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5NHDC5EV44;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "ro.imagin.CPU-Guard-Helper";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		5679E7E1303A14F900B08A35 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5NHDC5EV44;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "ro.imagin.CPU-Guard-Helper";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		5679E805303A3A5000B08A35 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "CPU Guard XPCService/CPU_Guard_XPCService.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5NHDC5EV44;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "CPU Guard XPCService/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "CPU Guard XPCService";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "ro.imagin.CPU-Guard-XPCService";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		5679E806303A3A5000B08A35 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "CPU Guard XPCService/CPU_Guard_XPCService.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5NHDC5EV44;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "CPU Guard XPCService/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "CPU Guard XPCService";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "ro.imagin.CPU-Guard-XPCService";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		6D48BC0E2FADBBBC001D28DB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -348,6 +609,24 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		5679E7DF303A14F900B08A35 /* Build configuration list for PBXNativeTarget "CPU Guard Helper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5679E7E0303A14F900B08A35 /* Debug */,
+				5679E7E1303A14F900B08A35 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5679E804303A3A5000B08A35 /* Build configuration list for PBXNativeTarget "CPU Guard XPCService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5679E805303A3A5000B08A35 /* Debug */,
+				5679E806303A3A5000B08A35 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		6D48BC002FADBBB9001D28DB /* Build configuration list for PBXProject "CPU Guard" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
