@@ -71,7 +71,7 @@ struct MemorySparklineView: View {
 }
 
 struct ContentView: View {
-    @StateObject private var monitor = ProcessMonitor()
+    @ObservedObject var monitor: ProcessMonitor
     @State private var userSortOrder: [KeyPathComparator<Process>] = []
 
     private var pinnedComparator: KeyPathComparator<Process> {
@@ -220,7 +220,5 @@ struct ContentView: View {
 
             }
         }
-        .onAppear { monitor.start() }
-        .onDisappear { monitor.stop() }
     }
 }

@@ -11,9 +11,11 @@ import AppKit
 final class StatusBarController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
+    private let monitor = ProcessMonitor()
 
     override init() {
         super.init()
+        monitor.start()
         configureStatusItem()
         configurePopover()
     }
@@ -28,7 +30,7 @@ final class StatusBarController: NSObject {
     private func configurePopover() {
         popover.behavior = .applicationDefined
         popover.contentSize = NSSize(width: 800, height: 360)
-        popover.contentViewController = NSHostingController(rootView: ContentView())
+        popover.contentViewController = NSHostingController(rootView: ContentView(monitor: monitor))
     }
 
     @objc private func togglePopover(_ sender: AnyObject?) {
