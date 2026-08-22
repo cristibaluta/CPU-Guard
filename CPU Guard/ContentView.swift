@@ -119,6 +119,17 @@ struct ContentView: View {
             Table(displayedProcesses, sortOrder: $userSortOrder) {
                 TableColumn("Name", value: \.name) { proc in
                     HStack(spacing: 8) {
+                        if proc.isPinned {
+                            Button {
+                                monitor.togglePin(proc)
+                            } label: {
+                                Image(systemName: "pin.fill")
+                                    .foregroundColor(.yellow)
+                                    .font(.system(size: 12))
+                            }
+                            .buttonStyle(.plain)
+                        }
+
                         Button {
                             monitor.togglePause(proc)
                         } label: {
