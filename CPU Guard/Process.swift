@@ -23,6 +23,7 @@ struct Process: Identifiable {
     var initialMemoryMB: Double  // Memory when first seen
     var isPaused: Bool
     var isPinned: Bool
+    var isResourceHog: Bool
     var hasMetrics: Bool  // True if proc_pidinfo succeeded
     var status: String { isPaused ? "Paused" : "Running" }
     var pinSortRank: Int { isPinned ? 1 : 0 }
@@ -33,6 +34,11 @@ struct Process: Identifiable {
 class ProcessMonitor: ObservableObject {
     @Published var processes: [Process] = []
     @Published var searchText: String = ""
+    @Published var resourceHogs: [Process] = []
+
+    var onNewHogDetected: (() -> Void)?
+    var onResourceHogsCleared: (() -> Void)?
+
     private var timer: Timer?
     private var previousCPUTimes: [Int32: UInt64] = [:]
     private var cpuHistoryByPID: [Int32: [Double]] = [:]
@@ -43,6 +49,7 @@ class ProcessMonitor: ObservableObject {
         let saved = UserDefaults.standard.stringArray(forKey: "pinnedProcessNames") ?? []
         return Set(saved)
     }()
+    private var hogSamplesByPID: [Int32: Int] = [:]
     private var previousTimestamp: Date = Date()
     private let sampleInterval: TimeInterval = 5.0
     private let cpuHistoryLimit = 60     // 5 minutes at 5s cadence
@@ -189,6 +196,16 @@ class ProcessMonitor: ObservableObject {
             }
             let initialMemory = initialMemoryByPID[pid] ?? memMB
 
+            // Resource hog detection: 1 sample at 5s cadence = 5s sustained > 10% CPU.
+            if shouldRecordSample {
+                if cpuPercent > 10.0 && hasMetrics {
+                    hogSamplesByPID[pid] = (hogSamplesByPID[pid] ?? 0) + 1
+                } else {
+                    hogSamplesByPID[pid] = 0
+                }
+            }
+            let isResourceHog = (hogSamplesByPID[pid] ?? 0) >= 1
+
             let isPaused = (Int32(p.kp_proc.p_stat) == SSTOP)
             let isPinned = pinnedPIDs.contains(pid) || pinnedNames.contains(name)
             let proc = Process(
@@ -204,6 +221,7 @@ class ProcessMonitor: ObservableObject {
                 initialMemoryMB: initialMemory,
                 isPaused: isPaused,
                 isPinned: isPinned,
+                isResourceHog: isResourceHog,
                 hasMetrics: hasMetrics
             )
             updated.append(proc)
@@ -216,6 +234,20 @@ class ProcessMonitor: ObservableObject {
         let liveNames = Set(updated.map(\.name))
         pinnedNames = pinnedNames.intersection(liveNames)
         UserDefaults.standard.set(Array(pinnedNames), forKey: "pinnedProcessNames")
+        hogSamplesByPID = hogSamplesByPID.filter { livePIDs.contains($0.key) }
+
+        // Update resource hogs and fire callbacks.
+        let newHogs = updated.filter { $0.isResourceHog }
+        let newHogNames = Set(newHogs.map(\.name))
+        let prevHogNames = Set(resourceHogs.map(\.name))
+        let allHogsCleared = newHogs.isEmpty && !resourceHogs.isEmpty
+        resourceHogs = newHogs
+        if !newHogNames.subtracting(prevHogNames).isEmpty {
+            onNewHogDetected?()
+        }
+        if allHogsCleared {
+            onResourceHogsCleared?()
+        }
 
         previousCPUTimes = newCPUTimes
         cpuHistoryByPID = newCPUHistoryByPID
