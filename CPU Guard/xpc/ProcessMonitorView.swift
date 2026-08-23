@@ -42,6 +42,6 @@ struct ProcessMonitorView: View {
             // ProcessMonitor.applyHelperResults.
             ContentView(monitor: monitor)
         }
-        .frame(width: 800, height: 360)
+        .frame(width: 800, height: 500)
     }
 }

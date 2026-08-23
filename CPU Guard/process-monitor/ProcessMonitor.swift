@@ -11,6 +11,7 @@ import Combine
 
 @MainActor
 class ProcessMonitor: ObservableObject {
+
     @Published var processes: [Process] = []
     @Published var searchText: String = ""
     @Published var resourceHogs: [Process] = []
@@ -298,7 +299,9 @@ class ProcessMonitor: ObservableObject {
     }
 
     private func registerHogSample(pid: Int32, cpuPercent: Double, hasMetrics: Bool, shouldRecordSample: Bool) {
-        guard shouldRecordSample else { return }
+        guard shouldRecordSample else {
+            return
+        }
         if cpuPercent > cpuMinHogPercent && hasMetrics {
             hogSamplesByPID[pid] = (hogSamplesByPID[pid] ?? 0) + 1
         } else {
@@ -338,5 +341,9 @@ class ProcessMonitor: ObservableObject {
         }
         UserDefaults.standard.set(Array(pinnedNames), forKey: "pinnedProcessNames")
         refresh()
+    }
+
+    func killProcess(pid: Int32, force: Bool, reply: @escaping (Bool, String?) -> Void) {
+        daemonManager?.killProcess(pid: pid, force: force, reply: reply)
     }
 }

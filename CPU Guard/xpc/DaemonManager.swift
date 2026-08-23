@@ -90,8 +90,7 @@ class DaemonManager: ObservableObject {
     /// every pid the helper was able to read; unreadable/missing pids are simply absent.
     /// Returns an empty result immediately if the daemon isn't registered — callers should
     /// treat that the same as "helper unavailable" rather than an error.
-    func fetchTaskInfo(forPIDs pids: [Int32],
-                        completion: @escaping (_ results: [Int32: (cpuTicks: Double, residentBytes: Double)]) -> Void) {
+    func fetchTaskInfo(forPIDs pids: [Int32], completion: @escaping (_ results: [Int32: (cpuTicks: Double, residentBytes: Double)]) -> Void) {
         guard isRegistered, !pids.isEmpty else {
             completion([:])
             return
@@ -112,6 +111,23 @@ class DaemonManager: ObservableObject {
             DispatchQueue.main.async {
                 completion(results)
             }
+        }
+    }
+
+    func killProcess(pid: Int32, force: Bool, reply: @escaping (Bool, String?) -> Void) {
+        guard isRegistered else {
+            reply(false, "Daemon not registered")
+            return
+        }
+        guard let helper = helperProxy(errorHandler: { error in
+            print("XPC Connection Error: \(error.localizedDescription)")
+            reply(false, "XPC Connection Error")
+        }) else {
+            reply(false, "XPC Connection Error else")
+            return
+        }
+        helper.killProcess(pid: pid, force: force) { success, error in
+            reply(success, error)
         }
     }
 }

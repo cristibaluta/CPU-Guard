@@ -25,6 +25,7 @@ public protocol HelperDaemonProtocol {
     /// kernel daemons, etc.) that the unprivileged main app can't query directly.
     /// Batched into one round trip rather than one XPC call per pid, since ProcessMonitor
     /// may need this for dozens of processes every refresh cycle.
-    func getTaskInfo(forPIDs pids: [Int32],
-                      with reply: @escaping (_ pids: [Int32], _ cpuTicks: [Double], _ residentBytes: [Double], _ success: [Bool]) -> Void)
+    func getTaskInfo(forPIDs pids: [Int32], with reply: @escaping (_ pids: [Int32], _ cpuTicks: [Double], _ residentBytes: [Double], _ success: [Bool]) -> Void)
+
+    func killProcess(pid: Int32, force: Bool, reply: @escaping (Bool, String?) -> Void)
 }

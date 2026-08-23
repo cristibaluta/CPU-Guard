@@ -32,8 +32,7 @@ class HelperDaemon: NSObject, HelperDaemonProtocol, NSXPCListenerDelegate {
         }
     }
 
-    func getTaskInfo(forPIDs pids: [Int32],
-                      with reply: @escaping ([Int32], [Double], [Double], [Bool]) -> Void) {
+    func getTaskInfo(forPIDs pids: [Int32], with reply: @escaping ([Int32], [Double], [Double], [Bool]) -> Void) {
         let expectedSize = Int32(MemoryLayout<proc_taskinfo>.size)
 
         var outPIDs: [Int32] = []
@@ -63,5 +62,20 @@ class HelperDaemon: NSObject, HelperDaemonProtocol, NSXPCListenerDelegate {
         }
 
         reply(outPIDs, cpuTicks, residentBytes, success)
+    }
+
+    func killProcess(pid: Int32, force: Bool, reply: @escaping (Bool, String?) -> Void) {
+        // Determine signal: SIGKILL (-9) forces immediate termination; SIGTERM (-15) asks politely
+        let signal = force ? SIGKILL : SIGTERM
+
+        // Call POSIX kill()
+        let result = kill(pid, signal)
+
+        if result == 0 {
+            reply(true, nil)
+        } else {
+            let errorMessage = String(cString: strerror(errno))
+            reply(false, errorMessage)
+        }
     }
 }

@@ -99,8 +99,17 @@ struct ContentView: View {
     }
 
     private func revealExecutableInFinder(_ proc: Process) {
-        guard canRevealInFinder(proc) else { return }
+        guard canRevealInFinder(proc) else {
+            return
+        }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: proc.executablePath)])
+    }
+
+    private func killProcess(_ proc: Process, force: Bool) {
+        monitor.killProcess(pid: proc.id, force: force) { success, error in
+            print(success)
+            print(error as Any)
+        }
     }
 
     var body: some View {
@@ -156,15 +165,28 @@ struct ContentView: View {
                     .contextMenu {
                         Text("Parent: \(proc.parentName) (\(proc.parentPID))")
                         Text("Path: \(proc.executablePath)")
+
                         Divider()
+
                         Button(proc.isPinned ? "Unpin" : "Pin") {
                             monitor.togglePin(proc)
                         }
+
                         Divider()
+
                         Button("Reveal Path in Finder") {
                             revealExecutableInFinder(proc)
                         }
                         .disabled(!canRevealInFinder(proc))
+
+                        Divider()
+
+                        Button("Kill App") {
+                            killProcess(proc, force: false)
+                        }
+                        Button("Force Kill App") {
+                            killProcess(proc, force: true)
+                        }
                     }
                 }
                 .width(min: 100, ideal: 120)
