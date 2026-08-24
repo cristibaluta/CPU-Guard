@@ -15,12 +15,15 @@ final class StatusBarController: NSObject {
     private let popover = NSPopover()
     private let daemonManager = DaemonManager()
     private let monitor: ProcessMonitor
+    private let powerMonitor: PowerMonitor
     private var hogPanel: NSPanel?
 
     override init() {
         monitor = ProcessMonitor(daemonManager: daemonManager)
+        powerMonitor = PowerMonitor()
         super.init()
         monitor.start()
+        powerMonitor.start()
         configureStatusItem()
         configurePopover()
         setupHogPanel()

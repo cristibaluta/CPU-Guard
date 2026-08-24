@@ -35,8 +35,8 @@ class PowerMonitor {
     private var rootPort: io_connect_t = 0
     private var notifyPortRef: IONotificationPortRef?
 
-    func startMonitoring() {
-        let appName = "com.example.PowerMonitor" as CFString
+    func start() {
+        let appName = "ro.imagin.CPU-Guard" as CFString
         rootPort = IORegisterForSystemPower(
             Unmanaged.passUnretained(self).toOpaque(),
             &notifyPortRef,
