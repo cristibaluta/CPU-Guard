@@ -31,10 +31,10 @@ class ProcessMonitor: ObservableObject {
     }()
     private var hogSamplesByPID: [Int32: Int] = [:]
     private var previousTimestamp: Date = Date()
-    private let sampleInterval: TimeInterval = 5.0
+    private let sampleInterval: TimeInterval = 10.0
     private let cpuHistoryLimit = 60     // 5 minutes at 5s cadence
     private let memoryHistoryLimit = 300 // 25 minutes at 5s cadence
-    private let cpuMinHogPercent = 50.0
+    private let cpuMinHogPercent = 100.0
     private let secondsPerMachTick: Double = {
         var info = mach_timebase_info_data_t()
         mach_timebase_info(&info)
