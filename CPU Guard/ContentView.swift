@@ -105,6 +105,39 @@ struct ContentView: View {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: proc.executablePath)])
     }
 
+    private func runningApp(for proc: Process) -> NSRunningApplication? {
+        guard let app = NSRunningApplication(processIdentifier: proc.id), app.bundleURL != nil else {
+            return nil
+        }
+        return app
+    }
+
+    private func restartApp(_ proc: Process) {
+        guard let app = runningApp(for: proc), let url = app.bundleURL else {
+            return
+        }
+        app.terminate()
+        // Wait (up to 30 s) for a graceful quit before relaunching.
+        Task { @MainActor in
+            for _ in 0..<60 {
+                if app.isTerminated { break }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+            guard app.isTerminated else { return }
+            _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        }
+    }
+
+    /// Shortens long strings in the middle, e.g. "/Applications/Ado…/MacOS/Photoshop".
+    private func truncatedMiddle(_ text: String, limit: Int = 50) -> String {
+        guard text.count > limit else {
+            return text
+        }
+        let head = (limit - 1) / 2
+        let tail = limit - 1 - head
+        return String(text.prefix(head)) + "…" + String(text.suffix(tail))
+    }
+
     private func killProcess(_ proc: Process, force: Bool) {
         monitor.killProcess(pid: proc.id, force: force) { success, error in
             print(success)
@@ -163,8 +196,8 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
                     .contentShape(Rectangle())
                     .contextMenu {
-                        Text("Parent: \(proc.parentName) (\(proc.parentPID))")
-                        Text("Path: \(proc.executablePath)")
+                        Text("Parent: \(truncatedMiddle(proc.parentName, limit: 30)) (\(proc.parentPID))")
+                        Text("Path: \(truncatedMiddle(proc.executablePath))")
 
                         Divider()
 
@@ -181,6 +214,10 @@ struct ContentView: View {
 
                         Divider()
 
+                        Button("Restart App") {
+                            restartApp(proc)
+                        }
+                        .disabled(runningApp(for: proc) == nil)
                         Button("Kill App") {
                             killProcess(proc, force: false)
                         }
