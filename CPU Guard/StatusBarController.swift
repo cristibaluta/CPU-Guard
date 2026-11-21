@@ -8,6 +8,7 @@
 import SwiftUI
 import AppKit
 import ServiceManagement
+import Combine
 
 @MainActor
 final class StatusBarController: NSObject {
@@ -21,6 +22,7 @@ final class StatusBarController: NSObject {
     private let memoryStore = MemoryRulesStore.shared
     private var memoryEngine: MemoryAlertEngine?
     private var rulesWindow: NSWindow?
+    private var cancellables = Set<AnyCancellable>()
 
     override init() {
         monitor = ProcessMonitor(daemonManager: daemonManager)
@@ -40,6 +42,23 @@ final class StatusBarController: NSObject {
         monitor.onResourceHogsCleared = { [weak self] in
             self?.hogPanel?.orderOut(nil)
         }
+        if let memoryEngine {
+            Publishers.CombineLatest(monitor.$resourceHogs, memoryEngine.$alerts)
+                .map { hogs, memAlerts in !hogs.isEmpty || !memAlerts.isEmpty }
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] isAlert in self?.setStatusIcon(alert: isAlert) }
+                .store(in: &cancellables)
+        }
+    }
+
+    private func setStatusIcon(alert: Bool) {
+        guard let button = statusItem.button,
+              let image = NSImage(named: alert ? "MenuBarIconAlert" : "MenuBarIcon") else { return }
+        image.isTemplate = true
+        image.size = NSSize(width: 18, height: 18)
+        image.accessibilityDescription = "CPU Guard"
+        button.image = image
     }
 
     private func configureStatusItem() {
@@ -52,13 +71,7 @@ final class StatusBarController: NSObject {
             .applying(.init(scale: .large))
 
         // 2. Initialize the image with the configuration
-        if let image = NSImage(systemSymbolName: "cpu", accessibilityDescription: "CPU Guard")?
-            .withSymbolConfiguration(config) {
-
-            // Ensures macOS properly tints the icon for light/dark menubar modes
-            image.isTemplate = true
-            button.image = image
-        }
+        setStatusIcon(alert: false)
 
         button.action = #selector(handleStatusItemClick(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
