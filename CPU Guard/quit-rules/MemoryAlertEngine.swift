@@ -138,7 +138,7 @@ final class MemoryAlertEngine: ObservableObject {
         guard let panel, let screen = NSScreen.main else { return }
         let height = rowHeight * CGFloat(alerts.count)
         let target = placement() ?? (screen.frame.maxX - panelWidth / 2 - 16, screen.frame.maxY - 40)
-        let x = min(target.midX - panelWidth / 2, screen.frame.maxX - panelWidth - 8)
+        let x = max(screen.frame.minX + 8, min(target.midX - panelWidth / 2, screen.frame.maxX - panelWidth - 8))
         panel.setFrame(NSRect(x: x, y: target.topY - height, width: panelWidth, height: height), display: true)
         if !panel.isVisible {
             panel.orderFront(nil)

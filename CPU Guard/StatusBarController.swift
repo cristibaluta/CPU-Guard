@@ -132,9 +132,14 @@ final class StatusBarController: NSObject {
         guard let screen = NSScreen.main else {
             return nil
         }
+        // Default: top-right corner. The status item's window may not be positioned yet right
+        // after launch (frame near the origin), so only trust it once it is on screen.
         var midX = screen.frame.maxX - 200
         if let button = statusItem.button, let window = button.window {
-            midX = window.convertToScreen(button.frame).midX
+            let frame = window.convertToScreen(button.frame)
+            if frame.width > 0, frame.midX > screen.frame.minX + 100, screen.frame.intersects(frame) {
+                midX = frame.midX
+            }
         }
         var topY = screen.frame.maxY - NSStatusBar.system.thickness - 16
         if let hog = hogPanel, hog.isVisible {
