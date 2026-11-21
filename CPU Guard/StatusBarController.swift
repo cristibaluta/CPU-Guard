@@ -23,6 +23,8 @@ final class StatusBarController: NSObject {
     private var memoryEngine: MemoryAlertEngine?
     private var rulesWindow: NSWindow?
     private var cancellables = Set<AnyCancellable>()
+    private let stats = SystemStatsMonitor()
+    private var isAlert = false
 
     override init() {
         monitor = ProcessMonitor(daemonManager: daemonManager)
@@ -34,6 +36,11 @@ final class StatusBarController: NSObject {
         monitor.start()
         powerMonitor.start()
         configureStatusItem()
+        stats.start()
+        Publishers.CombineLatest4(stats.$cpuUser, stats.$cpuSystem, stats.$memUsed, stats.$memTotal)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _, _, _, _ in self?.setStatusIcon(alert: self?.isAlert ?? false) }
+            .store(in: &cancellables)
         configurePopover()
         setupHogPanel()
         monitor.onNewHogDetected = { [weak self] in
@@ -53,11 +60,35 @@ final class StatusBarController: NSObject {
     }
 
     private func setStatusIcon(alert: Bool) {
+        isAlert = alert
         guard let button = statusItem.button,
-              let image = NSImage(named: alert ? "MenuBarIconAlert" : "MenuBarIcon") else { return }
+              let icon = NSImage(named: alert ? "MenuBarIconAlert" : "MenuBarIcon") else { return }
+
+        let memPercent = stats.memTotal > 0 ? stats.memUsed / stats.memTotal * 100 : 0
+        let lines = [String(format: "CPU %.0f%%", stats.cpuTotal), String(format: "MEM %.0f%%", memPercent)]
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
+        let sizes = lines.map { ($0 as NSString).size(withAttributes: attributes) }
+        let textWidth = ceil(sizes.map(\.width).max() ?? 0)
+        let iconSize: CGFloat = 18
+        let height: CGFloat = 22
+        let gap: CGFloat = 4
+        let blockHeight = sizes.map(\.height).reduce(0, +)
+
+        // Draw text + icon into a single template image so everything is vertically centered
+        // and tinted correctly for light/dark menu bars.
+        let image = NSImage(size: NSSize(width: textWidth + gap + iconSize, height: height), flipped: false) { _ in
+            var y = (height + blockHeight) / 2
+            for (line, size) in zip(lines, sizes) {
+                y -= size.height
+                (line as NSString).draw(at: NSPoint(x: textWidth - size.width, y: y), withAttributes: attributes)
+            }
+            icon.draw(in: NSRect(x: textWidth + gap, y: (height - iconSize) / 2, width: iconSize, height: iconSize))
+            return true
+        }
         image.isTemplate = true
-        image.size = NSSize(width: 18, height: 18)
         image.accessibilityDescription = "CPU Guard"
+        button.imagePosition = .imageOnly
         button.image = image
     }
 
