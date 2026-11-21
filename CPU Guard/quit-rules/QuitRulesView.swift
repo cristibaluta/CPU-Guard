@@ -7,14 +7,14 @@ import SwiftUI
 import AppKit
 internal import UniformTypeIdentifiers
 
-private func appName(for bundleID: String) -> String {
+func appName(for bundleID: String) -> String {
     if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
         return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
     }
     return bundleID
 }
 
-private func appIcon(for bundleID: String) -> NSImage {
+func appIcon(for bundleID: String) -> NSImage {
     if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
         return NSWorkspace.shared.icon(forFile: url.path)
     }

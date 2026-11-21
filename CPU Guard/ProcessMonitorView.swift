@@ -13,29 +13,27 @@ struct ProcessMonitorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Circle()
-                    .fill(daemonManager.isRegistered ? Color.green : Color.secondary)
-                    .frame(width: 8, height: 8)
-                Text(daemonManager.isRegistered ? "Helper Active" : "Helper Not Registered")
-                    .font(.subheadline)
+            // Only shown while the helper isn't registered. Once registered, it is
+            // managed from the status bar context menu.
+            if !daemonManager.isRegistered {
+                HStack {
+                    Circle()
+                        .fill(Color.secondary)
+                        .frame(width: 8, height: 8)
+                    Text("Helper Not Registered")
+                        .font(.subheadline)
 
-                Spacer()
+                    Spacer()
 
-                if daemonManager.isRegistered {
-                    Button("Unregister Helper") {
-                        daemonManager.unregisterDaemon()
-                    }
-                } else {
                     Button("Register Helper") {
                         daemonManager.registerDaemon()
                     }
                 }
-            }
-            .padding(8)
-            .background(Color(NSColor.controlBackgroundColor))
+                .padding(8)
+                .background(Color(NSColor.controlBackgroundColor))
 
-            Divider()
+                Divider()
+            }
 
             // The real process table. Rows the app can't read directly (WindowServer, etc.)
             // get filled in by the privileged helper once it's registered — see

@@ -18,12 +18,17 @@ final class StatusBarController: NSObject {
     private let powerMonitor: PowerMonitor
     private var hogPanel: NSPanel?
     private let rulesStore = QuitRulesStore.shared
+    private let memoryStore = MemoryRulesStore.shared
+    private var memoryEngine: MemoryAlertEngine?
     private var rulesWindow: NSWindow?
 
     override init() {
         monitor = ProcessMonitor(daemonManager: daemonManager)
         powerMonitor = PowerMonitor()
         super.init()
+        memoryEngine = MemoryAlertEngine(monitor: monitor, store: memoryStore) { [weak self] in
+            self?.memoryPanelPlacement()
+        }
         monitor.start()
         powerMonitor.start()
         configureStatusItem()
@@ -122,6 +127,22 @@ final class StatusBarController: NSObject {
         panel.setFrame(NSRect(x: originX, y: originY, width: panelWidth, height: panelHeight), display: true)
     }
 
+    /// Where the memory warning tooltip goes: under the status item, below the hog panel if it is showing.
+    private func memoryPanelPlacement() -> (midX: CGFloat, topY: CGFloat)? {
+        guard let screen = NSScreen.main else {
+            return nil
+        }
+        var midX = screen.frame.maxX - 200
+        if let button = statusItem.button, let window = button.window {
+            midX = window.convertToScreen(button.frame).midX
+        }
+        var topY = screen.frame.maxY - NSStatusBar.system.thickness - 16
+        if let hog = hogPanel, hog.isVisible {
+            topY = hog.frame.minY - 8
+        }
+        return (midX, topY)
+    }
+
     @objc private func handleStatusItemClick(_ sender: NSStatusBarButton) {
         let event = NSApp.currentEvent
         if event?.type == .rightMouseUp {
@@ -142,6 +163,16 @@ final class StatusBarController: NSObject {
         launchItem.target = self
         launchItem.state = isLaunchAtLoginEnabled ? .on : .off
         menu.addItem(launchItem)
+
+        daemonManager.updateStatus()
+        let helperItem = NSMenuItem(
+            title: "Helper Registered",
+            action: #selector(toggleHelper),
+            keyEquivalent: ""
+        )
+        helperItem.target = self
+        helperItem.state = daemonManager.isRegistered ? .on : .off
+        menu.addItem(helperItem)
 
         menu.addItem(.separator())
 
@@ -167,6 +198,28 @@ final class StatusBarController: NSObject {
         rulesItem.submenu = rulesMenu
         menu.addItem(rulesItem)
 
+        let memoryItem = NSMenuItem(title: "Memory Alerts", action: nil, keyEquivalent: "")
+        let memoryMenu = NSMenu()
+        for rule in memoryStore.rules {
+            let item = NSMenuItem(
+                title: "\(appName(for: rule.bundleID)) > \(formatMemory(rule.limitMB))",
+                action: #selector(toggleMemoryRule(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = rule.id
+            item.state = rule.isEnabled ? .on : .off
+            memoryMenu.addItem(item)
+        }
+        if !memoryStore.rules.isEmpty {
+            memoryMenu.addItem(.separator())
+        }
+        let editMemoryItem = NSMenuItem(title: "Edit Rules…", action: #selector(showRulesEditor), keyEquivalent: "")
+        editMemoryItem.target = self
+        memoryMenu.addItem(editMemoryItem)
+        memoryItem.submenu = memoryMenu
+        menu.addItem(memoryItem)
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
@@ -181,12 +234,28 @@ final class StatusBarController: NSObject {
         statusItem.menu = nil  // Reset so left-click still opens the popover
     }
 
+    @objc private func toggleHelper() {
+        if daemonManager.isRegistered {
+            daemonManager.unregisterDaemon()
+        } else {
+            daemonManager.registerDaemon()
+        }
+    }
+
     @objc private func toggleRule(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID,
               let index = rulesStore.rules.firstIndex(where: { $0.id == id }) else {
             return
         }
         rulesStore.rules[index].isEnabled.toggle()
+    }
+
+    @objc private func toggleMemoryRule(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID,
+              let index = memoryStore.rules.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        memoryStore.rules[index].isEnabled.toggle()
     }
 
     @objc private func showRulesEditor() {
@@ -197,9 +266,11 @@ final class StatusBarController: NSObject {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Quit Rules"
+            window.title = "CPU Guard Rules"
             window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView: QuitRulesView(store: rulesStore))
+            window.contentViewController = NSHostingController(
+                rootView: RulesWindowView(quitStore: rulesStore, memoryStore: memoryStore)
+            )
             window.center()
             rulesWindow = window
         }
