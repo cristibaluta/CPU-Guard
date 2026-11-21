@@ -17,6 +17,8 @@ final class StatusBarController: NSObject {
     private let monitor: ProcessMonitor
     private let powerMonitor: PowerMonitor
     private var hogPanel: NSPanel?
+    private let rulesStore = QuitRulesStore.shared
+    private var rulesWindow: NSWindow?
 
     override init() {
         monitor = ProcessMonitor(daemonManager: daemonManager)
@@ -143,6 +145,30 @@ final class StatusBarController: NSObject {
 
         menu.addItem(.separator())
 
+        let rulesItem = NSMenuItem(title: "Quit Rules", action: nil, keyEquivalent: "")
+        let rulesMenu = NSMenu()
+        for rule in rulesStore.rules {
+            let item = NSMenuItem(
+                title: "\(rule.name) (\(rule.triggers.count) → \(rule.linked.count))",
+                action: #selector(toggleRule(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = rule.id
+            item.state = rule.isEnabled ? .on : .off
+            rulesMenu.addItem(item)
+        }
+        if !rulesStore.rules.isEmpty {
+            rulesMenu.addItem(.separator())
+        }
+        let editItem = NSMenuItem(title: "Edit Rules…", action: #selector(showRulesEditor), keyEquivalent: "")
+        editItem.target = self
+        rulesMenu.addItem(editItem)
+        rulesItem.submenu = rulesMenu
+        menu.addItem(rulesItem)
+
+        menu.addItem(.separator())
+
         let quitItem = NSMenuItem(
             title: "Quit CPU Guard",
             action: #selector(NSApplication.terminate(_:)),
@@ -153,6 +179,32 @@ final class StatusBarController: NSObject {
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
         statusItem.menu = nil  // Reset so left-click still opens the popover
+    }
+
+    @objc private func toggleRule(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID,
+              let index = rulesStore.rules.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        rulesStore.rules[index].isEnabled.toggle()
+    }
+
+    @objc private func showRulesEditor() {
+        if rulesWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 760, height: 520),
+                styleMask: [.titled, .closable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Quit Rules"
+            window.isReleasedWhenClosed = false
+            window.contentViewController = NSHostingController(rootView: QuitRulesView(store: rulesStore))
+            window.center()
+            rulesWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        rulesWindow?.makeKeyAndOrderFront(nil)
     }
 
     @objc private func toggleLaunchAtLogin() {
