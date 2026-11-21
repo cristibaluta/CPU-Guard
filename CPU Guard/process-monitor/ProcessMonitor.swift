@@ -31,9 +31,10 @@ class ProcessMonitor: ObservableObject {
     }()
     private var hogSamplesByPID: [Int32: Int] = [:]
     private var previousTimestamp: Date = Date()
+    private var lastRecordedTimestamp: Date = .distantPast
     private let sampleInterval: TimeInterval = 10.0
-    private let cpuHistoryLimit = 60     // 5 minutes at 5s cadence
-    private let memoryHistoryLimit = 300 // 25 minutes at 5s cadence
+    private let cpuHistoryLimit = HistoryConfig.cpuSamples        // 5 minutes at 10s cadence
+    private let memoryHistoryLimit = HistoryConfig.memorySamples  // 25 minutes at 10s cadence
     private let cpuMinHogPercent = 100.0
     private let secondsPerMachTick: Double = {
         var info = mach_timebase_info_data_t()
@@ -91,7 +92,11 @@ class ProcessMonitor: ObservableObject {
         let now = Date()
         let elapsed = now.timeIntervalSince(previousTimestamp)
         // Only append history on timer cadence so chart windows map to real time.
-        let shouldRecordSample = previousCPUTimes.isEmpty || elapsed >= (sampleInterval * 0.9)
+        let shouldRecordSample = previousCPUTimes.isEmpty
+            || now.timeIntervalSince(lastRecordedTimestamp) >= (sampleInterval * 0.9)
+        if shouldRecordSample {
+            lastRecordedTimestamp = now
+        }
         var newCPUTimes: [Int32: UInt64] = [:]
         var newCPUHistoryByPID: [Int32: [Double]] = [:]
         var newMemoryHistoryByPID: [Int32: [Double]] = [:]

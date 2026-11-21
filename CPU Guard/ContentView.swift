@@ -10,22 +10,38 @@ import AppKit
 
 struct CPUSparklineView: View {
     let values: [Double]
+    var capacity: Int = HistoryConfig.cpuSamples
 
     var body: some View {
         GeometryReader { geo in
-            let points = values.suffix(60)
+            let points = Array(values.suffix(capacity))
             let width = geo.size.width
             let height = geo.size.height
-            let stepX = width / CGFloat(max(points.count - 1, 1))
+            // The chart always spans the full window; new samples enter at the right edge
+            // and the not-yet-filled part on the left stays empty.
+            let stepX = width / CGFloat(max(capacity - 1, 1))
+            let startX = CGFloat(capacity - points.count) * stepX
+
+            // Not-yet-recorded part of the window: fine dashed gray baseline.
+            Path { path in
+                let step = width / CGFloat(max(capacity - 1, 1))
+                let emptyWidth = min(CGFloat(capacity - points.count) * step, width)
+                path.move(to: CGPoint(x: 0, y: height - 0.5))
+                path.addLine(to: CGPoint(x: emptyWidth, y: height - 0.5))
+            }
+            .stroke(Color.gray.opacity(0.6), style: StrokeStyle(lineWidth: 0.75, dash: [2, 2]))
 
             Path { path in
                 guard let first = points.first else { return }
 
                 let firstY = height - (CGFloat(max(0, min(first, 100))) / 100.0 * height)
-                path.move(to: CGPoint(x: 0, y: firstY))
+                path.move(to: CGPoint(x: startX, y: firstY))
+                if points.count == 1 {
+                    path.addLine(to: CGPoint(x: startX + 1, y: firstY))
+                }
 
                 for (index, value) in points.dropFirst().enumerated() {
-                    let x = CGFloat(index + 1) * stepX
+                    let x = startX + CGFloat(index + 1) * stepX
                     let y = height - (CGFloat(max(0, min(value, 100))) / 100.0 * height)
                     path.addLine(to: CGPoint(x: x, y: y))
                 }
@@ -38,15 +54,26 @@ struct CPUSparklineView: View {
 
 struct MemorySparklineView: View {
     let values: [Double]
+    var capacity: Int = HistoryConfig.memorySamples
 
     var body: some View {
         GeometryReader { geo in
-            let points = values.suffix(300)
+            let points = Array(values.suffix(capacity))
             let width = geo.size.width
             let height = geo.size.height
 
+            // Not-yet-recorded part of the window: fine dashed gray baseline.
+            Path { path in
+                let step = width / CGFloat(max(capacity - 1, 1))
+                let emptyWidth = min(CGFloat(capacity - points.count) * step, width)
+                path.move(to: CGPoint(x: 0, y: height - 0.5))
+                path.addLine(to: CGPoint(x: emptyWidth, y: height - 0.5))
+            }
+            .stroke(Color.gray.opacity(0.6), style: StrokeStyle(lineWidth: 0.75, dash: [2, 2]))
+
             if !points.isEmpty {
-                let stepX = width / CGFloat(max(points.count - 1, 1))
+                let stepX = width / CGFloat(max(capacity - 1, 1))
+                let startX = CGFloat(capacity - points.count) * stepX
                 let maxMemory = points.max() ?? 100.0
                 let minMemory = points.min() ?? 0.0
                 let range = max(maxMemory - minMemory, 1.0)
@@ -54,10 +81,13 @@ struct MemorySparklineView: View {
                 Path { path in
                     if let first = points.first {
                         let firstY = height - ((CGFloat(first) - CGFloat(minMemory)) / CGFloat(range) * height)
-                        path.move(to: CGPoint(x: 0, y: firstY))
+                        path.move(to: CGPoint(x: startX, y: firstY))
+                        if points.count == 1 {
+                            path.addLine(to: CGPoint(x: startX + 1, y: firstY))
+                        }
 
                         for (index, value) in points.dropFirst().enumerated() {
-                            let x = CGFloat(index + 1) * stepX
+                            let x = startX + CGFloat(index + 1) * stepX
                             let y = height - ((CGFloat(value) - CGFloat(minMemory)) / CGFloat(range) * height)
                             path.addLine(to: CGPoint(x: x, y: y))
                         }
@@ -73,6 +103,7 @@ struct MemorySparklineView: View {
 struct ContentView: View {
     @ObservedObject var monitor: ProcessMonitor
     @State private var userSortOrder: [KeyPathComparator<Process>] = []
+    @StateObject private var stats = SystemStatsMonitor()
 
     private var pinnedComparator: KeyPathComparator<Process> {
         KeyPathComparator(\Process.pinSortRank, order: .reverse)
@@ -148,12 +179,29 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                TextField("Search processes...", text: $monitor.searchText)
-                    .textFieldStyle(.plain)
+                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    TextField("Search", text: $monitor.searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .frame(width: 200)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color(NSColor.textBackgroundColor))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.secondary.opacity(0.3), lineWidth: 0.5)
+                )
             }
-            .padding(8)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .background(Color(NSColor.controlBackgroundColor))
 
             Divider()
@@ -172,21 +220,16 @@ struct ContentView: View {
                             .buttonStyle(.plain)
                         }
 
-                        Button {
+                        ProcessIconButton(proc: proc) {
                             monitor.togglePause(proc)
-                        } label: {
-                            Image(systemName: proc.isPaused ? "play.circle.fill" : "pause.circle.fill")
-                                .foregroundColor(proc.isPaused ? .green : .orange)
-                                .font(.system(size: 14))
                         }
-                        .buttonStyle(.plain)
 
                         VStack(alignment: .leading, spacing: 1) {
                             Text(proc.name)
                                 .fontWeight(.medium)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
-                            Text("PID \(proc.id)")
+                            Text(verbatim: "PID \(proc.id)")
                                 .font(.system(size: 10))
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
@@ -196,7 +239,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
                     .contentShape(Rectangle())
                     .contextMenu {
-                        Text("Parent: \(truncatedMiddle(proc.parentName, limit: 30)) (\(proc.parentPID))")
+                        Text(verbatim: "Parent: \(truncatedMiddle(proc.parentName, limit: 30)) (\(proc.parentPID))")
                         Text("Path: \(truncatedMiddle(proc.executablePath))")
 
                         Divider()
@@ -278,6 +321,12 @@ struct ContentView: View {
                 .width(170)
 
             }
+
+            Divider()
+
+            SystemStatsBar(stats: stats)
         }
+        .onAppear { stats.start() }
+        .onDisappear { stats.stop() }
     }
 }

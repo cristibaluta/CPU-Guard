@@ -7,6 +7,12 @@
 
 import Foundation
 
+/// History windows. Samples are recorded every `ProcessMonitor.sampleInterval` (10 s).
+enum HistoryConfig {
+    static let cpuSamples = 30       // 5 minutes
+    static let memorySamples = 150   // 25 minutes
+}
+
 struct Process: Identifiable {
     let id: Int32  // PID
     let name: String
