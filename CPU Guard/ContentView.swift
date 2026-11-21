@@ -143,10 +143,35 @@ struct ContentView: View {
         return app
     }
 
+    /// The app that gets restarted for this row: the process itself if it is an app, otherwise the app
+    /// responsible for it (e.g. Safari for its WebKit WebContent / Networking / GPU processes).
+    private func restartTarget(for proc: Process) -> (app: NSRunningApplication, isOwner: Bool)? {
+        if let app = runningApp(for: proc) {
+            return (app, false)
+        }
+        if let pid = ResponsibleProcess.pid(for: proc.id),
+           let owner = NSRunningApplication(processIdentifier: pid),
+           owner.bundleURL != nil {
+            return (owner, true)
+        }
+        return nil
+    }
+
+    private func restartTitle(for proc: Process) -> String {
+        guard let target = restartTarget(for: proc) else {
+            return "Restart App"
+        }
+        if target.isOwner {
+            return "Restart \(target.app.localizedName ?? "owner app") (owns this process)"
+        }
+        return "Restart App"
+    }
+
     private func restartApp(_ proc: Process) {
-        guard let app = runningApp(for: proc), let url = app.bundleURL else {
+        guard let target = restartTarget(for: proc), let url = target.app.bundleURL else {
             return
         }
+        let app = target.app
         app.terminate()
         // Wait (up to 30 s) for a graceful quit before relaunching.
         Task { @MainActor in
@@ -257,10 +282,10 @@ struct ContentView: View {
 
                         Divider()
 
-                        Button("Restart App") {
+                        Button(restartTitle(for: proc)) {
                             restartApp(proc)
                         }
-                        .disabled(runningApp(for: proc) == nil)
+                        .disabled(restartTarget(for: proc) == nil)
                         Button("Kill App") {
                             killProcess(proc, force: false)
                         }
