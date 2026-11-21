@@ -36,6 +36,8 @@ private enum ProcessIconCache {
 struct ProcessIconButton: View {
     let proc: Process
     let action: () -> Void
+    /// True while the mouse is anywhere over the row's name cell, not just over the icon.
+    var isRowHovered = false
     @State private var hovering = false
 
     var body: some View {
@@ -44,7 +46,7 @@ struct ProcessIconButton: View {
                 Image(systemName: "play.circle.fill")
                     .foregroundColor(.green)
                     .font(.system(size: 16))
-            } else if hovering {
+            } else if hovering || isRowHovered {
                 Image(systemName: "pause.circle.fill")
                     .foregroundColor(.orange)
                     .font(.system(size: 16))
@@ -58,5 +60,16 @@ struct ProcessIconButton: View {
         .frame(width: 20, height: 20)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+    }
+}
+
+/// Tracks whether the mouse is over the whole content and hands that state to the builder.
+struct HoverReader<Content: View>: View {
+    @ViewBuilder let content: (Bool) -> Content
+    @State private var hovering = false
+
+    var body: some View {
+        content(hovering)
+            .onHover { hovering = $0 }
     }
 }

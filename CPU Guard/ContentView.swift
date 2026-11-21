@@ -339,6 +339,7 @@ struct ContentView: View {
 
             Table(displayedProcesses, sortOrder: sortBinding) {
                 TableColumn("Name", value: \.name) { proc in
+                    HoverReader { rowHovered in
                     HStack(spacing: 8) {
                         if proc.isPinned {
                             Button {
@@ -351,7 +352,7 @@ struct ContentView: View {
                             .buttonStyle(.plain)
                         }
 
-                        ProcessIconButton(proc: proc) {
+                        ProcessIconButton(proc: proc, isRowHovered: rowHovered) {
                             monitor.togglePause(proc)
                         }
 
@@ -399,6 +400,7 @@ struct ContentView: View {
                             killProcess(proc, force: true)
                         }
                     }
+                    }
                 }
                 .width(min: 100, ideal: 120)
 
@@ -421,16 +423,9 @@ struct ContentView: View {
                 TableColumn("Memory (25m history)", value: \.memoryMB) { proc in
                     if proc.hasMetrics {
                         HStack(spacing: 8) {
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text(String(format: "%.1f MB", proc.memoryHistory.max() ?? proc.memoryMB))
-                                    .font(.system(size: 11))
-                                    .monospacedDigit()
-                                Text(String(format: "%.1f MB", proc.memoryHistory.min() ?? proc.memoryMB))
-                                    .font(.system(size: 10))
-                                    .monospacedDigit()
-                                    .foregroundColor(.secondary)
-                            }
-                            .frame(width: 70, alignment: .trailing)
+                            Text(String(format: "%.1f MB", proc.memoryMB))
+                                .monospacedDigit()
+                                .frame(width: 70, alignment: .trailing)
                             MemorySparklineView(values: proc.memoryHistory)
                         }
                     } else {

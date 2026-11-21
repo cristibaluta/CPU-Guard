@@ -294,6 +294,11 @@ class ProcessMonitor: ObservableObject {
                 if !processes[index].memoryHistory.isEmpty {
                     processes[index].memoryHistory[processes[index].memoryHistory.count - 1] = memMB
                 }
+                // refresh() reads the histories back from these dictionaries on the next tick, so the
+                // real values must be stored there too; otherwise the placeholder 0s are what
+                // accumulates and only the latest point looks real.
+                cpuHistoryByPID[pid] = processes[index].cpuHistory
+                memoryHistoryByPID[pid] = processes[index].memoryHistory
             }
 
             registerHogSample(pid: pid, cpuPercent: cpuPercent, hasMetrics: true, shouldRecordSample: shouldRecordSample)
