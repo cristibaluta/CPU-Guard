@@ -27,8 +27,8 @@ final class MemoryAlertEngine: ObservableObject {
     }
 
     private let store: MemoryRulesStore
-    /// Returns the horizontal center and the top edge (screen coordinates) where the tooltip should appear.
-    private let placement: () -> (midX: CGFloat, topY: CGFloat)?
+    /// Given the panel width, returns the left edge and the top edge (screen coordinates) where the panel should appear.
+    private let placement: (CGFloat) -> (originX: CGFloat, topY: CGFloat)?
     private var cancellable: AnyCancellable?
     /// Rules currently over their limit; an alert is raised only on the transition.
     private var overLimit = Set<UUID>()
@@ -38,7 +38,7 @@ final class MemoryAlertEngine: ObservableObject {
     private let panelWidth: CGFloat = 430
     private let autoDismiss: TimeInterval = 15
 
-    init(monitor: ProcessMonitor, store: MemoryRulesStore, placement: @escaping () -> (midX: CGFloat, topY: CGFloat)?) {
+    init(monitor: ProcessMonitor, store: MemoryRulesStore, placement: @escaping (CGFloat) -> (originX: CGFloat, topY: CGFloat)?) {
         self.store = store
         self.placement = placement
         cancellable = monitor.$processes
@@ -115,6 +115,12 @@ final class MemoryAlertEngine: ObservableObject {
 
     // MARK: - Panel
 
+    /// Re-run placement, e.g. when another window of the app opened or closed.
+    func reposition() {
+        guard !alerts.isEmpty else { return }
+        updatePanel()
+    }
+
     private func updatePanel() {
         guard !alerts.isEmpty else {
             panel?.orderOut(nil)
@@ -137,9 +143,8 @@ final class MemoryAlertEngine: ObservableObject {
         }
         guard let panel, let screen = NSScreen.main else { return }
         let height = rowHeight * CGFloat(alerts.count)
-        let target = placement() ?? (screen.frame.maxX - panelWidth / 2 - 16, screen.frame.maxY - 40)
-        let x = max(screen.frame.minX + 8, min(target.midX - panelWidth / 2, screen.frame.maxX - panelWidth - 8))
-        panel.setFrame(NSRect(x: x, y: target.topY - height, width: panelWidth, height: height), display: true)
+        let target = placement(panelWidth) ?? (screen.frame.maxX - panelWidth - 16, screen.frame.maxY - 40)
+        panel.setFrame(NSRect(x: target.originX, y: target.topY - height, width: panelWidth, height: height), display: true)
         if !panel.isVisible {
             panel.orderFront(nil)
         }

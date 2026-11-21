@@ -8,9 +8,52 @@
 import SwiftUI
 import AppKit
 
+/// Fine dotted baseline for the not-yet-recorded part of a chart window.
+private func emptyBaseline(width: CGFloat, height: CGFloat, emptyWidth: CGFloat) -> some View {
+    Path { path in
+        path.move(to: CGPoint(x: 0, y: height))
+        path.addLine(to: CGPoint(x: emptyWidth, y: height))
+    }
+    .stroke(Color.gray.opacity(0.7), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, dash: [0.1, 4]))
+}
+
+/// Marker + value label for the sample under the mouse.
+private struct ChartHoverOverlay: View {
+    let point: CGPoint
+    let label: String
+    let width: CGFloat
+    let color: Color
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Path { path in
+                path.move(to: CGPoint(x: point.x, y: 0))
+                path.addLine(to: CGPoint(x: point.x, y: 24))
+            }
+            .stroke(Color.secondary.opacity(0.5), lineWidth: 0.5)
+
+            Circle()
+                .fill(color)
+                .frame(width: 5, height: 5)
+                .position(point)
+
+            Text(label)
+                .font(.system(size: 9, weight: .medium))
+                .monospacedDigit()
+                .padding(.horizontal, 3)
+                .background(Color(NSColor.windowBackgroundColor).opacity(0.9))
+                .cornerRadius(3)
+                .fixedSize()
+                .position(x: min(max(point.x, 26), width - 26), y: point.y < 12 ? 17 : 6)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 struct CPUSparklineView: View {
     let values: [Double]
     var capacity: Int = HistoryConfig.cpuSamples
+    @State private var hoverX: CGFloat?
 
     var body: some View {
         GeometryReader { geo in
@@ -21,88 +64,151 @@ struct CPUSparklineView: View {
             // and the not-yet-filled part on the left stays empty.
             let stepX = width / CGFloat(max(capacity - 1, 1))
             let startX = CGFloat(capacity - points.count) * stepX
-
-            // Not-yet-recorded part of the window: fine dashed gray baseline.
-            Path { path in
-                let step = width / CGFloat(max(capacity - 1, 1))
-                let emptyWidth = min(CGFloat(capacity - points.count) * step, width)
-                path.move(to: CGPoint(x: 0, y: height - 0.5))
-                path.addLine(to: CGPoint(x: emptyWidth, y: height - 0.5))
+            let yFor: (Double) -> CGFloat = { value in
+                height - (CGFloat(max(0, min(value, 100))) / 100.0 * height)
             }
-            .stroke(Color.gray.opacity(0.6), style: StrokeStyle(lineWidth: 0.75, dash: [2, 2]))
+
+            emptyBaseline(width: width, height: height, emptyWidth: min(startX, width))
 
             Path { path in
                 guard let first = points.first else { return }
 
-                let firstY = height - (CGFloat(max(0, min(first, 100))) / 100.0 * height)
-                path.move(to: CGPoint(x: startX, y: firstY))
+                path.move(to: CGPoint(x: startX, y: yFor(first)))
                 if points.count == 1 {
-                    path.addLine(to: CGPoint(x: startX + 1, y: firstY))
+                    path.addLine(to: CGPoint(x: startX + 1, y: yFor(first)))
                 }
 
                 for (index, value) in points.dropFirst().enumerated() {
-                    let x = startX + CGFloat(index + 1) * stepX
-                    let y = height - (CGFloat(max(0, min(value, 100))) / 100.0 * height)
-                    path.addLine(to: CGPoint(x: x, y: y))
+                    path.addLine(to: CGPoint(x: startX + CGFloat(index + 1) * stepX, y: yFor(value)))
                 }
             }
             .stroke(Color.accentColor, lineWidth: 1.5)
+
+            if let hoverX, !points.isEmpty {
+                let index = min(max(Int(((hoverX - startX) / stepX).rounded()), 0), points.count - 1)
+                let point = CGPoint(x: startX + CGFloat(index) * stepX, y: yFor(points[index]))
+                ChartHoverOverlay(point: point, label: String(format: "%.1f%%", points[index]),
+                                  width: width, color: .accentColor)
+            }
         }
         .frame(height: 24)
+        .contentShape(Rectangle())
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let location): hoverX = location.x
+            case .ended: hoverX = nil
+            }
+        }
     }
 }
 
 struct MemorySparklineView: View {
     let values: [Double]
     var capacity: Int = HistoryConfig.memorySamples
+    @State private var hoverX: CGFloat?
 
     var body: some View {
         GeometryReader { geo in
             let points = Array(values.suffix(capacity))
             let width = geo.size.width
             let height = geo.size.height
-
-            // Not-yet-recorded part of the window: fine dashed gray baseline.
-            Path { path in
-                let step = width / CGFloat(max(capacity - 1, 1))
-                let emptyWidth = min(CGFloat(capacity - points.count) * step, width)
-                path.move(to: CGPoint(x: 0, y: height - 0.5))
-                path.addLine(to: CGPoint(x: emptyWidth, y: height - 0.5))
+            let stepX = width / CGFloat(max(capacity - 1, 1))
+            let startX = CGFloat(capacity - points.count) * stepX
+            let maxMemory = points.max() ?? 100.0
+            let minMemory = points.min() ?? 0.0
+            let range = max(maxMemory - minMemory, 1.0)
+            let yFor: (Double) -> CGFloat = { value in
+                height - ((CGFloat(value) - CGFloat(minMemory)) / CGFloat(range) * height)
             }
-            .stroke(Color.gray.opacity(0.6), style: StrokeStyle(lineWidth: 0.75, dash: [2, 2]))
+
+            emptyBaseline(width: width, height: height, emptyWidth: min(startX, width))
 
             if !points.isEmpty {
-                let stepX = width / CGFloat(max(capacity - 1, 1))
-                let startX = CGFloat(capacity - points.count) * stepX
-                let maxMemory = points.max() ?? 100.0
-                let minMemory = points.min() ?? 0.0
-                let range = max(maxMemory - minMemory, 1.0)
-
                 Path { path in
                     if let first = points.first {
-                        let firstY = height - ((CGFloat(first) - CGFloat(minMemory)) / CGFloat(range) * height)
-                        path.move(to: CGPoint(x: startX, y: firstY))
+                        path.move(to: CGPoint(x: startX, y: yFor(first)))
                         if points.count == 1 {
-                            path.addLine(to: CGPoint(x: startX + 1, y: firstY))
+                            path.addLine(to: CGPoint(x: startX + 1, y: yFor(first)))
                         }
 
                         for (index, value) in points.dropFirst().enumerated() {
-                            let x = startX + CGFloat(index + 1) * stepX
-                            let y = height - ((CGFloat(value) - CGFloat(minMemory)) / CGFloat(range) * height)
-                            path.addLine(to: CGPoint(x: x, y: y))
+                            path.addLine(to: CGPoint(x: startX + CGFloat(index + 1) * stepX, y: yFor(value)))
                         }
                     }
                 }
                 .stroke(Color.blue, lineWidth: 1.5)
+
+                if let hoverX {
+                    let index = min(max(Int(((hoverX - startX) / stepX).rounded()), 0), points.count - 1)
+                    let point = CGPoint(x: startX + CGFloat(index) * stepX, y: yFor(points[index]))
+                    ChartHoverOverlay(point: point, label: String(format: "%.1f MB", points[index]),
+                                      width: width, color: .blue)
+                }
             }
         }
         .frame(height: 24)
+        .contentShape(Rectangle())
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let location): hoverX = location.x
+            case .ended: hoverX = nil
+            }
+        }
     }
 }
 
 struct ContentView: View {
     @ObservedObject var monitor: ProcessMonitor
-    @State private var userSortOrder: [KeyPathComparator<Process>] = []
+    @State private var userSortOrder: [KeyPathComparator<Process>] = ContentView.loadSortOrder()
+
+    private static let sortKeyDefaultsKey = "processSortKey"
+    private static let sortAscendingDefaultsKey = "processSortAscending"
+
+    private static func loadSortOrder() -> [KeyPathComparator<Process>] {
+        let defaults = UserDefaults.standard
+        guard let key = defaults.string(forKey: sortKeyDefaultsKey) else {
+            return []
+        }
+        let order: SortOrder = defaults.bool(forKey: sortAscendingDefaultsKey) ? .forward : .reverse
+        switch key {
+        case "name": return [KeyPathComparator(\Process.name, order: order)]
+        case "cpu": return [KeyPathComparator(\Process.cpuUsage, order: order)]
+        case "memory": return [KeyPathComparator(\Process.memoryMB, order: order)]
+        default: return []
+        }
+    }
+
+    private static func saveSortOrder(_ comparators: [KeyPathComparator<Process>]) {
+        let defaults = UserDefaults.standard
+        guard let first = comparators.first else {
+            defaults.removeObject(forKey: sortKeyDefaultsKey)
+            defaults.removeObject(forKey: sortAscendingDefaultsKey)
+            return
+        }
+        let key: String?
+        if first.keyPath == \Process.name {
+            key = "name"
+        } else if first.keyPath == \Process.cpuUsage {
+            key = "cpu"
+        } else if first.keyPath == \Process.memoryMB {
+            key = "memory"
+        } else {
+            key = nil
+        }
+        guard let key else { return }
+        defaults.set(key, forKey: sortKeyDefaultsKey)
+        defaults.set(first.order == .forward, forKey: sortAscendingDefaultsKey)
+    }
+
+    private var sortBinding: Binding<[KeyPathComparator<Process>]> {
+        Binding(
+            get: { userSortOrder },
+            set: {
+                userSortOrder = $0
+                ContentView.saveSortOrder($0)
+            }
+        )
+    }
     @StateObject private var stats = SystemStatsMonitor()
 
     private var pinnedComparator: KeyPathComparator<Process> {
@@ -231,7 +337,7 @@ struct ContentView: View {
 
             Divider()
 
-            Table(displayedProcesses, sortOrder: $userSortOrder) {
+            Table(displayedProcesses, sortOrder: sortBinding) {
                 TableColumn("Name", value: \.name) { proc in
                     HStack(spacing: 8) {
                         if proc.isPinned {
@@ -296,54 +402,43 @@ struct ContentView: View {
                 }
                 .width(min: 100, ideal: 120)
 
-                TableColumn("CPU", value: \.cpuUsage) { proc in
+                TableColumn("CPU (5m history)", value: \.cpuUsage) { proc in
                     if proc.hasMetrics {
-                        Text(String(format: "%.1f%%", proc.cpuUsage))
-                            .foregroundColor(proc.cpuUsage > 50 ? .red : proc.cpuUsage > 20 ? .orange : .primary)
-                    } else {
-                        Text("---")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .width(40)
-
-                TableColumn("5m CPU") { proc in
-                    if proc.hasMetrics {
-                        CPUSparklineView(values: proc.cpuHistory)
-                    } else {
-                        Text("---")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .width(170)
-
-                TableColumn("Memory", value: \.memoryMB) { proc in
-                    if proc.hasMetrics {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(String(format: "%.1f → %.1f MB", proc.initialMemoryMB, proc.memoryMB))
-                                .font(.system(size: 11))
-                            let delta = proc.memoryMB - proc.initialMemoryMB
-                            let deltaText = String(format: "%+.1f MB", delta)
-                            Text(deltaText)
-                                .font(.system(size: 10))
-                                .foregroundColor(delta > 0 ? .orange : delta < 0 ? .green : .primary)
+                        HStack(spacing: 8) {
+                            Text(String(format: "%.1f%%", proc.cpuUsage))
+                                .monospacedDigit()
+                                .foregroundColor(proc.cpuUsage > 50 ? .red : proc.cpuUsage > 20 ? .orange : .primary)
+                                .frame(width: 50, alignment: .trailing)
+                            CPUSparklineView(values: proc.cpuHistory)
                         }
                     } else {
                         Text("---")
                             .foregroundColor(.secondary)
                     }
                 }
-                .width(100)
+                .width(min: 180, ideal: 220)
 
-                TableColumn("Mem 25m") { proc in
+                TableColumn("Memory (25m history)", value: \.memoryMB) { proc in
                     if proc.hasMetrics {
-                        MemorySparklineView(values: proc.memoryHistory)
+                        HStack(spacing: 8) {
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(String(format: "%.1f MB", proc.memoryHistory.max() ?? proc.memoryMB))
+                                    .font(.system(size: 11))
+                                    .monospacedDigit()
+                                Text(String(format: "%.1f MB", proc.memoryHistory.min() ?? proc.memoryMB))
+                                    .font(.system(size: 10))
+                                    .monospacedDigit()
+                                    .foregroundColor(.secondary)
+                            }
+                            .frame(width: 70, alignment: .trailing)
+                            MemorySparklineView(values: proc.memoryHistory)
+                        }
                     } else {
                         Text("---")
                             .foregroundColor(.secondary)
                     }
                 }
-                .width(170)
+                .width(min: 200, ideal: 240)
 
             }
 

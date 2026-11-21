@@ -11,7 +11,7 @@ import ServiceManagement
 import Combine
 
 @MainActor
-final class StatusBarController: NSObject {
+final class StatusBarController: NSObject, NSPopoverDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
     private let daemonManager = DaemonManager()
@@ -30,16 +30,17 @@ final class StatusBarController: NSObject {
         monitor = ProcessMonitor(daemonManager: daemonManager)
         powerMonitor = PowerMonitor()
         super.init()
-        memoryEngine = MemoryAlertEngine(monitor: monitor, store: memoryStore) { [weak self] in
-            self?.memoryPanelPlacement()
+        memoryEngine = MemoryAlertEngine(monitor: monitor, store: memoryStore) { [weak self] width in
+            self?.memoryPanelPlacement(width: width)
         }
         monitor.start()
         powerMonitor.start()
         configureStatusItem()
         stats.start()
-        Publishers.CombineLatest4(stats.$cpuUser, stats.$cpuSystem, stats.$memUsed, stats.$memTotal)
+        Publishers.CombineLatest4(stats.$cpuUser, stats.$cpuSystem, stats.$memUsed, stats.$swapUsed)
+            .combineLatest(stats.$pressure)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _, _, _, _ in self?.setStatusIcon(alert: self?.isAlert ?? false) }
+            .sink { [weak self] _, _ in self?.setStatusIcon(alert: self?.isAlert ?? false) }
             .store(in: &cancellables)
         configurePopover()
         setupHogPanel()
@@ -48,6 +49,7 @@ final class StatusBarController: NSObject {
         }
         monitor.onResourceHogsCleared = { [weak self] in
             self?.hogPanel?.orderOut(nil)
+            self?.memoryEngine?.reposition()
         }
         if let memoryEngine {
             Publishers.CombineLatest(monitor.$resourceHogs, memoryEngine.$alerts)
@@ -64,29 +66,44 @@ final class StatusBarController: NSObject {
         guard let button = statusItem.button,
               let icon = NSImage(named: alert ? "MenuBarIconAlert" : "MenuBarIcon") else { return }
 
-        let memPercent = stats.memTotal > 0 ? stats.memUsed / stats.memTotal * 100 : 0
-        let lines = [String(format: "CPU %.0f%%", stats.cpuTotal), String(format: "MEM %.0f%%", memPercent)]
+        let gb = 1_073_741_824.0
+        let underPressure = stats.pressure != .normal
+        // Not a template image (the swap value needs a color), so pick the menu bar foreground ourselves.
+        let isDark = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let baseColor: NSColor = isDark ? .white : .black
+        let swapColor: NSColor = underPressure ? .systemOrange : baseColor
+
         let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
-        let sizes = lines.map { ($0 as NSString).size(withAttributes: attributes) }
+        func attrs(_ color: NSColor) -> [NSAttributedString.Key: Any] {
+            [.font: font, .foregroundColor: color]
+        }
+
+        let cpuLine = NSMutableAttributedString(string: String(format: "CPU %.0f%%", stats.cpuTotal), attributes: attrs(baseColor))
+        let memLine = NSMutableAttributedString(string: String(format: "%.1f GB | ", stats.memUsed / gb), attributes: attrs(baseColor))
+        memLine.append(NSAttributedString(string: String(format: "%.1f GB", stats.swapUsed / gb), attributes: attrs(swapColor)))
+        let lines = [cpuLine, memLine]
+
+        let sizes = lines.map { $0.size() }
         let textWidth = ceil(sizes.map(\.width).max() ?? 0)
         let iconSize: CGFloat = 18
         let height: CGFloat = 22
         let gap: CGFloat = 4
         let blockHeight = sizes.map(\.height).reduce(0, +)
 
-        // Draw text + icon into a single template image so everything is vertically centered
-        // and tinted correctly for light/dark menu bars.
+        // Text + icon are drawn into one image so everything is vertically centered.
         let image = NSImage(size: NSSize(width: textWidth + gap + iconSize, height: height), flipped: false) { _ in
             var y = (height + blockHeight) / 2
             for (line, size) in zip(lines, sizes) {
                 y -= size.height
-                (line as NSString).draw(at: NSPoint(x: textWidth - size.width, y: y), withAttributes: attributes)
+                line.draw(at: NSPoint(x: textWidth - size.width, y: y))
             }
-            icon.draw(in: NSRect(x: textWidth + gap, y: (height - iconSize) / 2, width: iconSize, height: iconSize))
+            let iconRect = NSRect(x: textWidth + gap, y: (height - iconSize) / 2, width: iconSize, height: iconSize)
+            icon.draw(in: iconRect)
+            baseColor.set()
+            iconRect.fill(using: .sourceAtop)
             return true
         }
-        image.isTemplate = true
+        image.isTemplate = false
         image.accessibilityDescription = "CPU Guard"
         button.imagePosition = .imageOnly
         button.image = image
@@ -111,6 +128,7 @@ final class StatusBarController: NSObject {
 
     private func configurePopover() {
         popover.behavior = .applicationDefined
+        popover.delegate = self
         popover.contentSize = NSSize(width: 800, height: 500)
 //        popover.contentViewController = NSHostingController(rootView: ContentView(monitor: monitor))
         popover.contentViewController = NSHostingController(rootView: ProcessMonitorView(monitor: monitor, daemonManager: daemonManager))
@@ -119,6 +137,7 @@ final class StatusBarController: NSObject {
     private func setupHogPanel() {
         let view = HogAlertView(monitor: monitor) { [weak self] in
             self?.hogPanel?.orderOut(nil)
+            self?.memoryEngine?.reposition()
         }
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 620, height: 200),
@@ -143,6 +162,7 @@ final class StatusBarController: NSObject {
         if !panel.isVisible {
             panel.orderFront(nil)
         }
+        memoryEngine?.reposition()
     }
 
     // Coordinate system is from bottom-left
@@ -157,39 +177,63 @@ final class StatusBarController: NSObject {
         let panelHeight = min(headerH + rowH * CGFloat(hogCount) + 1, 380)
         let panelWidth: CGFloat = 620
 
-        // Position just below the menu bar, horizontally near the status item.
-        let menuBarH = NSStatusBar.system.thickness
-        let screenFrame = screen.frame
-
-        var originX = screenFrame.maxX - panelWidth - 16
-        if let button = statusItem.button, let buttonWindow = button.window {
-            let buttonRect = buttonWindow.convertToScreen(button.frame)
-            originX = min(buttonRect.maxX - panelWidth/2, screenFrame.maxX - panelWidth - 8)
-        }
-        let originY = screenFrame.maxY - menuBarH - panelHeight - 16
+        // Stack below the popover when it is open, otherwise just below the status item.
+        let origin = stackOrigin(width: panelWidth, below: [popoverWindow]) ?? (screen.frame.maxX - panelWidth - 16, screen.frame.maxY - 40)
+        let originX = origin.x
+        let originY = origin.topY - panelHeight
 
         panel.setFrame(NSRect(x: originX, y: originY, width: panelWidth, height: panelHeight), display: true)
     }
 
-    /// Where the memory warning tooltip goes: under the status item, below the hog panel if it is showing.
-    private func memoryPanelPlacement() -> (midX: CGFloat, topY: CGFloat)? {
+    private var popoverWindow: NSWindow? {
+        popover.isShown ? popover.contentViewController?.view.window : nil
+    }
+
+    /// Where the memory warning goes: stacked below the popover and hog panel when they are open.
+    private func memoryPanelPlacement(width: CGFloat) -> (originX: CGFloat, topY: CGFloat)? {
+        guard let origin = stackOrigin(width: width, below: [popoverWindow, hogPanel]) else {
+            return nil
+        }
+        return (origin.x, origin.topY)
+    }
+
+    /// Windows are stacked vertically and right-aligned to the first open one.
+    /// With none open, the result is centered under the status item.
+    private func stackOrigin(width: CGFloat, below windows: [NSWindow?]) -> (x: CGFloat, topY: CGFloat)? {
         guard let screen = NSScreen.main else {
             return nil
         }
-        // Default: top-right corner. The status item's window may not be positioned yet right
-        // after launch (frame near the origin), so only trust it once it is on screen.
-        var midX = screen.frame.maxX - 200
-        if let button = statusItem.button, let window = button.window {
-            let frame = window.convertToScreen(button.frame)
-            if frame.width > 0, frame.midX > screen.frame.minX + 100, screen.frame.intersects(frame) {
-                midX = frame.midX
+        let frames = windows.compactMap { $0 }.filter { $0.isVisible }.map(\.frame)
+        let x: CGFloat
+        let topY: CGFloat
+        if let first = frames.first {
+            x = first.maxX - width
+            topY = (frames.map(\.minY).min() ?? first.minY) - 8
+        } else {
+            // The status item's window may not be positioned yet right after launch (frame near
+            // the origin), so only trust it once it is on screen.
+            var midX = screen.frame.maxX - 200
+            if let button = statusItem.button, let window = button.window {
+                let frame = window.convertToScreen(button.frame)
+                if frame.width > 0, frame.midX > screen.frame.minX + 100, screen.frame.intersects(frame) {
+                    midX = frame.midX
+                }
             }
+            x = midX - width / 2
+            topY = screen.frame.maxY - NSStatusBar.system.thickness - 16
         }
-        var topY = screen.frame.maxY - NSStatusBar.system.thickness - 16
+        return (max(screen.frame.minX + 8, min(x, screen.frame.maxX - width - 8)), topY)
+    }
+
+    private func repositionPanels() {
         if let hog = hogPanel, hog.isVisible {
-            topY = hog.frame.minY - 8
+            positionHogPanel()
         }
-        return (midX, topY)
+        memoryEngine?.reposition()
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        repositionPanels()
     }
 
     @objc private func handleStatusItemClick(_ sender: NSStatusBarButton) {
@@ -350,5 +394,6 @@ final class StatusBarController: NSObject {
         }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
+        repositionPanels()
     }
 }
