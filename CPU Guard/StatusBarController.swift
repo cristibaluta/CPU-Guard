@@ -26,6 +26,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private var cancellables = Set<AnyCancellable>()
     private let stats = SystemStatsMonitor()
     private var isAlert = false
+    private var displayMode = StatusDisplayMode.load()
+    // 2 s samples, 3 per candle (6 s), 20 candles = 2 minutes of history.
+    private var cpuSeries = CandleSeries(samplesPerCandle: 3, maxCandles: 20)
+    private var memSeries = CandleSeries(samplesPerCandle: 3, maxCandles: 20)
+    private var sampleTimer: Timer?
 
     override init() {
         monitor = ProcessMonitor(daemonManager: daemonManager)
@@ -38,6 +43,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         powerMonitor.start()
         configureStatusItem()
         stats.start()
+        sampleTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.recordSample()
+            }
+        }
         Publishers.CombineLatest4(stats.$cpuUser, stats.$cpuSystem, stats.$memUsed, stats.$swapUsed)
             .combineLatest(stats.$pressure)
             .receive(on: DispatchQueue.main)
@@ -62,6 +72,14 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         }
     }
 
+    private func recordSample() {
+        cpuSeries.add(stats.cpuTotal)
+        memSeries.add(stats.memTotal > 0 ? stats.memUsed / stats.memTotal * 100 : 0)
+        if displayMode == .charts {
+            setStatusIcon(alert: isAlert)
+        }
+    }
+
     private func setStatusIcon(alert: Bool) {
         isAlert = alert
         guard let button = statusItem.button,
@@ -79,26 +97,45 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             [.font: font, .foregroundColor: color]
         }
 
-        let cpuLine = NSMutableAttributedString(string: String(format: "CPU %.0f%%", stats.cpuTotal), attributes: attrs(baseColor))
-        let memLine = NSMutableAttributedString(string: String(format: "%.1f GB | ", stats.memUsed / gb), attributes: attrs(baseColor))
-        memLine.append(NSAttributedString(string: String(format: "%.1f GB", stats.swapUsed / gb), attributes: attrs(swapColor)))
-        let lines = [cpuLine, memLine]
+        var lines: [NSAttributedString] = []
+        if displayMode == .values {
+            let cpuLine = NSMutableAttributedString(string: String(format: "CPU %.0f%%", stats.cpuTotal), attributes: attrs(baseColor))
+            let memLine = NSMutableAttributedString(string: String(format: "%.1f GB | ", stats.memUsed / gb), attributes: attrs(baseColor))
+            memLine.append(NSAttributedString(string: String(format: "%.1f GB", stats.swapUsed / gb), attributes: attrs(swapColor)))
+            lines = [cpuLine, memLine]
+        }
 
         let sizes = lines.map { $0.size() }
-        let textWidth = ceil(sizes.map(\.width).max() ?? 0)
         let iconSize: CGFloat = 18
         let height: CGFloat = 22
         let gap: CGFloat = 4
+        let chartHeight: CGFloat = 18
+        let chartWidth = chartHeight * 2
         let blockHeight = sizes.map(\.height).reduce(0, +)
 
-        // Text + icon are drawn into one image so everything is vertically centered.
-        let image = NSImage(size: NSSize(width: textWidth + gap + iconSize, height: height), flipped: false) { _ in
-            var y = (height + blockHeight) / 2
-            for (line, size) in zip(lines, sizes) {
-                y -= size.height
-                line.draw(at: NSPoint(x: textWidth - size.width, y: y))
+        let showCharts = displayMode == .charts
+        let textWidth = ceil(sizes.map(\.width).max() ?? 0)
+        let leadingWidth: CGFloat = showCharts ? chartWidth * 2 + gap : textWidth
+        let iconX = leadingWidth > 0 ? leadingWidth + gap : 0
+        let cpuSeries = self.cpuSeries
+        let memSeries = self.memSeries
+
+        // Everything is drawn into one image so it is vertically centered.
+        let image = NSImage(size: NSSize(width: iconX + iconSize, height: height), flipped: false) { _ in
+            if showCharts {
+                let y = (height - chartHeight) / 2
+                CandleChart.draw(cpuSeries, in: NSRect(x: 0, y: y, width: chartWidth, height: chartHeight),
+                                 color: baseColor, highThreshold: 80)
+                CandleChart.draw(memSeries, in: NSRect(x: chartWidth + gap, y: y, width: chartWidth, height: chartHeight),
+                                 color: baseColor, highThreshold: 90)
+            } else {
+                var y = (height + blockHeight) / 2
+                for (line, size) in zip(lines, sizes) {
+                    y -= size.height
+                    line.draw(at: NSPoint(x: textWidth - size.width, y: y))
+                }
             }
-            let iconRect = NSRect(x: textWidth + gap, y: (height - iconSize) / 2, width: iconSize, height: iconSize)
+            let iconRect = NSRect(x: iconX, y: (height - iconSize) / 2, width: iconSize, height: iconSize)
             icon.draw(in: iconRect)
             baseColor.set()
             iconRect.fill(using: .sourceAtop)
@@ -286,6 +323,18 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
         menu.addItem(.separator())
 
+        let displayItem = NSMenuItem(title: "Status Bar Display", action: nil, keyEquivalent: "")
+        let displayMenu = NSMenu()
+        for mode in StatusDisplayMode.allCases {
+            let item = NSMenuItem(title: mode.title, action: #selector(selectDisplayMode(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = mode == displayMode ? .on : .off
+            displayMenu.addItem(item)
+        }
+        displayItem.submenu = displayMenu
+        menu.addItem(displayItem)
+
         let rulesItem = NSMenuItem(title: "Quit Rules", action: nil, keyEquivalent: "")
         let rulesMenu = NSMenu()
         for rule in rulesStore.rules {
@@ -367,6 +416,16 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         }
         NSApp.activate(ignoringOtherApps: true)
         aboutWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func selectDisplayMode(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let mode = StatusDisplayMode(rawValue: raw) else {
+            return
+        }
+        displayMode = mode
+        mode.save()
+        setStatusIcon(alert: isAlert)
     }
 
     @objc private func toggleHelper() {
