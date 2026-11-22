@@ -22,6 +22,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let memoryStore = MemoryRulesStore.shared
     private var memoryEngine: MemoryAlertEngine?
     private var rulesWindow: NSWindow?
+    private var aboutWindow: NSWindow?
     private var cancellables = Set<AnyCancellable>()
     private let stats = SystemStatsMonitor()
     private var isAlert = false
@@ -131,7 +132,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         popover.delegate = self
         popover.contentSize = NSSize(width: 800, height: 500)
 //        popover.contentViewController = NSHostingController(rootView: ContentView(monitor: monitor))
-        popover.contentViewController = NSHostingController(rootView: ProcessMonitorView(monitor: monitor, daemonManager: daemonManager))
+        popover.contentViewController = NSHostingController(rootView: ProcessMonitorView(
+            monitor: monitor,
+            daemonManager: daemonManager,
+            onIconClick: { [weak self] in self?.showContextMenuFromPopover() }
+        ))
     }
 
     private func setupHogPanel() {
@@ -246,7 +251,19 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 
     private func showContextMenu() {
+        statusItem.menu = makeContextMenu()
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil  // Reset so left-click still opens the popover
+    }
+
+    /// Shared by the status item's right-click and the icon in the popover header.
+    private func makeContextMenu() -> NSMenu {
         let menu = NSMenu()
+
+        let aboutItem = NSMenuItem(title: "About CPU Guard", action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
+        menu.addItem(.separator())
 
         let launchItem = NSMenuItem(
             title: "Launch at Login",
@@ -322,9 +339,34 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         )
         menu.addItem(quitItem)
 
-        statusItem.menu = menu
-        statusItem.button?.performClick(nil)
-        statusItem.menu = nil  // Reset so left-click still opens the popover
+        return menu
+    }
+
+    private func showContextMenuFromPopover() {
+        guard let window = popover.contentViewController?.view.window,
+              let view = window.contentView,
+              let event = NSApp.currentEvent else {
+            return
+        }
+        NSMenu.popUpContextMenu(makeContextMenu(), with: event, for: view)
+    }
+
+    @objc private func showAbout() {
+        if aboutWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 300, height: 240),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "About CPU Guard"
+            window.isReleasedWhenClosed = false
+            window.contentViewController = NSHostingController(rootView: AboutView())
+            window.center()
+            aboutWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        aboutWindow?.makeKeyAndOrderFront(nil)
     }
 
     @objc private func toggleHelper() {

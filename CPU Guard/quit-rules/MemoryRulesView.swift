@@ -20,6 +20,10 @@ struct RulesWindowView: View {
                 .tabItem { Text("Memory Alerts") }
         }
         .padding(8)
+        // The tab bar is centered, so the top-left corner is free.
+        .overlay(alignment: .topLeading) {
+            AppBadgeIcon().padding(.leading, 12).padding(.top, 6)
+        }
     }
 }
 

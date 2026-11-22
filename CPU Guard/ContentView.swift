@@ -50,6 +50,22 @@ private struct ChartHoverOverlay: View {
     }
 }
 
+/// The app icon (same as the status bar one), shown without actions in the app's other windows
+/// so it's clear where they come from.
+struct AppBadgeIcon: View {
+    var size: CGFloat = 18
+
+    var body: some View {
+        Image("MenuBarIcon")
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .foregroundColor(.primary)
+            .allowsHitTesting(false)
+    }
+}
+
 struct CPUSparklineView: View {
     let values: [Double]
     var capacity: Int = HistoryConfig.cpuSamples
@@ -159,6 +175,12 @@ struct MemorySparklineView: View {
 
 struct ContentView: View {
     @ObservedObject var monitor: ProcessMonitor
+    var onIconClick: (() -> Void)?
+
+    init(monitor: ProcessMonitor, onIconClick: (() -> Void)? = nil) {
+        self.monitor = monitor
+        self.onIconClick = onIconClick
+    }
     @State private var userSortOrder: [KeyPathComparator<Process>] = ContentView.loadSortOrder()
 
     private static let sortKeyDefaultsKey = "processSortKey"
@@ -310,6 +332,18 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
+                // Same icon as the status bar (18 pt there), 1.5x bigger.
+                Button {
+                    onIconClick?()
+                } label: {
+                    Image("MenuBarIcon")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 27, height: 27)
+                        .foregroundColor(.primary)
+                }
+                .buttonStyle(.plain)
                 Spacer()
                 HStack(spacing: 4) {
                     Image(systemName: "magnifyingglass")

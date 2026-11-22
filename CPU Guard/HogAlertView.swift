@@ -13,6 +13,7 @@ struct HogAlertView: View {
         VStack(spacing: 0) {
             // Header bar
             HStack(spacing: 6) {
+                AppBadgeIcon()
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.orange)
                     .font(.system(size: 12))

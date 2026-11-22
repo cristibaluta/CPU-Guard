@@ -81,15 +81,35 @@ class ProcessMonitor: ObservableObject {
         timer?.invalidate()
     }
 
-    func refresh() {
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
-        var size = 0
-        sysctl(&mib, 4, nil, &size, nil, 0)
-        let count = size / MemoryLayout<kinfo_proc>.stride
-        var procs = [kinfo_proc](repeating: kinfo_proc(), count: count)
-        sysctl(&mib, 4, &procs, &size, nil, 0)
+    private var isSampling = false
+    private var refreshQueued = false
+    private let sampler = ProcessSampler()
 
-        let now = Date()
+    /// Reads the process list on a background task (hundreds of syscalls), then merges the
+    /// result into the published state on the main actor.
+    func refresh() {
+        if isSampling {
+            refreshQueued = true
+            return
+        }
+        isSampling = true
+        let sampler = self.sampler
+        Task.detached(priority: .utility) { [weak self] in
+            let snapshot = sampler.sample()
+            await MainActor.run {
+                guard let self else { return }
+                self.isSampling = false
+                self.apply(snapshot)
+                if self.refreshQueued {
+                    self.refreshQueued = false
+                    self.refresh()
+                }
+            }
+        }
+    }
+
+    private func apply(_ snapshot: ProcessSnapshot) {
+        let now = snapshot.timestamp
         let elapsed = now.timeIntervalSince(previousTimestamp)
         // Only append history on timer cadence so chart windows map to real time.
         let shouldRecordSample = previousCPUTimes.isEmpty
@@ -101,75 +121,32 @@ class ProcessMonitor: ObservableObject {
         var newCPUHistoryByPID: [Int32: [Double]] = [:]
         var newMemoryHistoryByPID: [Int32: [Double]] = [:]
 
-        // Build PID->name/path maps up front so we can label parent processes.
         var nameByPID: [Int32: String] = [:]
-        var executablePathByPID: [Int32: String] = [:]
-        for p in procs {
-            let pid = p.kp_proc.p_pid
-            guard pid > 0 else {
-                continue
-            }
-
-            let nameBytes = p.kp_proc.p_comm
-            let kernelName = withUnsafeBytes(of: nameBytes) { ptr -> String in
-                let buf = ptr.bindMemory(to: CChar.self)
-                return String(cString: buf.baseAddress!)
-            }
-
-            var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-            let pathLen = proc_pidpath(pid, &pathBuffer, UInt32(pathBuffer.count))
-            let executablePath = pathLen > 0 ? String(cString: pathBuffer) : "-"
-            executablePathByPID[pid] = executablePath
-
-            let displayName: String
-            if executablePath != "-" {
-                displayName = URL(fileURLWithPath: executablePath).lastPathComponent
-            } else {
-                displayName = kernelName
-            }
-
-            if !displayName.isEmpty {
-                nameByPID[pid] = displayName
-            }
+        for e in snapshot.entries {
+            nameByPID[e.pid] = e.name
         }
 
         var updated: [Process] = []
-        for p in procs {
-            let pid = p.kp_proc.p_pid
-            guard pid > 0 else { continue }
-
-            guard let name = nameByPID[pid], !name.isEmpty else {
-                continue
-            }
-
-            let parentPID = p.kp_eproc.e_ppid
-            let parentName = nameByPID[parentPID] ?? "-"
-            let executablePath = executablePathByPID[pid] ?? "-"
-
-            // Memory + CPU via proc_pidinfo
-            var taskInfo = proc_taskinfo()
-            let size = Int32(MemoryLayout<proc_taskinfo>.size)
-            let ret = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &taskInfo, size)
+        updated.reserveCapacity(snapshot.entries.count)
+        for e in snapshot.entries {
+            let pid = e.pid
+            let name = e.name
+            let parentName = nameByPID[e.parentPID] ?? "-"
 
             var memMB = 0.0
             var cpuPercent = 0.0
-            var hasMetrics = false
-
-            if ret == Int32(MemoryLayout<proc_taskinfo>.size) {
-                hasMetrics = true
-                memMB = Double(taskInfo.pti_resident_size) / 1_048_576.0
-
-                let totalTicks = taskInfo.pti_total_user + taskInfo.pti_total_system
-                newCPUTimes[pid] = totalTicks
-                if let prev = previousCPUTimes[pid], elapsed > 0 {
-                    let delta = Double(totalTicks - prev)
+            let hasMetrics = e.hasMetrics
+            // If proc_pidinfo failed (kernel_task, windowserver, etc.) the process is still
+            // included, but with hasMetrics = false.
+            if hasMetrics {
+                memMB = e.memMB
+                newCPUTimes[pid] = e.totalTicks
+                if let prev = previousCPUTimes[pid], elapsed > 0, e.totalTicks >= prev {
                     // proc_taskinfo CPU totals are mach absolute ticks; convert to seconds.
-                    let cpuSeconds = delta * secondsPerMachTick
+                    let cpuSeconds = Double(e.totalTicks - prev) * secondsPerMachTick
                     cpuPercent = (cpuSeconds / elapsed) * 100.0
                 }
             }
-            // If proc_pidinfo fails (common for kernel_task, windowserver, etc.),
-            // we still include the process but with hasMetrics = false.
 
             var cpuHistory = cpuHistoryByPID[pid] ?? []
             if shouldRecordSample {
@@ -199,26 +176,25 @@ class ProcessMonitor: ObservableObject {
             registerHogSample(pid: pid, cpuPercent: cpuPercent, hasMetrics: hasMetrics, shouldRecordSample: shouldRecordSample)
             let isResourceHog = (hogSamplesByPID[pid] ?? 0) >= 1
 
-            let isPaused = (Int32(p.kp_proc.p_stat) == SSTOP)
             let isPinned = pinnedPIDs.contains(pid) || pinnedNames.contains(name)
-            let proc = Process(
+            updated.append(Process(
                 id: pid,
                 name: name,
-                parentPID: parentPID,
+                parentPID: e.parentPID,
                 parentName: parentName,
-                executablePath: executablePath,
+                executablePath: e.path,
                 cpuUsage: cpuPercent,
                 cpuHistory: cpuHistory,
                 memoryMB: memMB,
                 memoryHistory: memoryHistory,
                 initialMemoryMB: initialMemory,
-                isPaused: isPaused,
+                isPaused: e.isStopped,
                 isPinned: isPinned,
                 isResourceHog: isResourceHog,
                 hasMetrics: hasMetrics
-            )
-            updated.append(proc)
+            ))
         }
+
 
         // Drop pins for processes that no longer exist to keep state tidy.
         let livePIDs = Set(updated.map(\.id))
@@ -234,9 +210,10 @@ class ProcessMonitor: ObservableObject {
         cpuHistoryByPID = newCPUHistoryByPID
         memoryHistoryByPID = newMemoryHistoryByPID
         previousTimestamp = now
+        let scores = Dictionary(uniqueKeysWithValues: updated.map { ($0.id, historyCPUScore(for: $0)) })
         processes = updated.sorted {
-            let lhsScore = historyCPUScore(for: $0)
-            let rhsScore = historyCPUScore(for: $1)
+            let lhsScore = scores[$0.id] ?? 0
+            let rhsScore = scores[$1.id] ?? 0
 
             if lhsScore == rhsScore {
                 return $0.cpuUsage > $1.cpuUsage
@@ -265,8 +242,10 @@ class ProcessMonitor: ObservableObject {
                                      shouldRecordSample: Bool) {
         guard !results.isEmpty else { return }
 
+        var procs = processes
+
         for (pid, info) in results {
-            guard let index = processes.firstIndex(where: { $0.id == pid }) else { continue }
+            guard let index = procs.firstIndex(where: { $0.id == pid }) else { continue }
 
             let memMB = info.residentBytes / 1_048_576.0
             var cpuPercent = 0.0
@@ -276,35 +255,36 @@ class ProcessMonitor: ObservableObject {
             }
             previousHelperCPUTimes[pid] = info.cpuTicks
 
-            processes[index].hasMetrics = true
-            processes[index].cpuUsage = cpuPercent
-            processes[index].memoryMB = memMB
+            procs[index].hasMetrics = true
+            procs[index].cpuUsage = cpuPercent
+            procs[index].memoryMB = memMB
 
             if initialMemoryByPID[pid] == nil {
                 initialMemoryByPID[pid] = memMB
             }
-            processes[index].initialMemoryMB = initialMemoryByPID[pid] ?? memMB
+            procs[index].initialMemoryMB = initialMemoryByPID[pid] ?? memMB
 
             if shouldRecordSample {
                 // The synchronous pass already appended a 0 placeholder for this pid; replace
                 // it rather than appending again now that we have a real reading.
-                if !processes[index].cpuHistory.isEmpty {
-                    processes[index].cpuHistory[processes[index].cpuHistory.count - 1] = cpuPercent
+                if !procs[index].cpuHistory.isEmpty {
+                    procs[index].cpuHistory[procs[index].cpuHistory.count - 1] = cpuPercent
                 }
-                if !processes[index].memoryHistory.isEmpty {
-                    processes[index].memoryHistory[processes[index].memoryHistory.count - 1] = memMB
+                if !procs[index].memoryHistory.isEmpty {
+                    procs[index].memoryHistory[procs[index].memoryHistory.count - 1] = memMB
                 }
                 // refresh() reads the histories back from these dictionaries on the next tick, so the
                 // real values must be stored there too; otherwise the placeholder 0s are what
                 // accumulates and only the latest point looks real.
-                cpuHistoryByPID[pid] = processes[index].cpuHistory
-                memoryHistoryByPID[pid] = processes[index].memoryHistory
+                cpuHistoryByPID[pid] = procs[index].cpuHistory
+                memoryHistoryByPID[pid] = procs[index].memoryHistory
             }
 
             registerHogSample(pid: pid, cpuPercent: cpuPercent, hasMetrics: true, shouldRecordSample: shouldRecordSample)
-            processes[index].isResourceHog = (hogSamplesByPID[pid] ?? 0) >= 1
+            procs[index].isResourceHog = (hogSamplesByPID[pid] ?? 0) >= 1
         }
 
+        processes = procs
         refreshHogAggregates()
     }
 
@@ -355,5 +335,93 @@ class ProcessMonitor: ObservableObject {
 
     func killProcess(pid: Int32, force: Bool, reply: @escaping (Bool, String?) -> Void) {
         daemonManager?.killProcess(pid: pid, force: force, reply: reply)
+    }
+}
+
+// MARK: - Background sampling
+
+struct RawProcess: Sendable {
+    let pid: Int32
+    let parentPID: Int32
+    let name: String
+    let path: String
+    let isStopped: Bool
+    let hasMetrics: Bool
+    let memMB: Double
+    let totalTicks: UInt64
+}
+
+struct ProcessSnapshot: Sendable {
+    let timestamp: Date
+    let entries: [RawProcess]
+}
+
+/// Does the syscall-heavy part of a refresh. Only ever used by one task at a time
+/// (ProcessMonitor serialises calls), so the path cache needs no locking.
+final class ProcessSampler: @unchecked Sendable {
+    private struct PathKey: Hashable {
+        let pid: Int32
+        let startSeconds: Int
+    }
+    private var pathCache: [PathKey: String] = [:]
+
+    func sample() -> ProcessSnapshot {
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
+        var size = 0
+        sysctl(&mib, 4, nil, &size, nil, 0)
+        // Leave headroom: processes can appear between the two calls.
+        let capacity = size / MemoryLayout<kinfo_proc>.stride + 32
+        var procs = [kinfo_proc](repeating: kinfo_proc(), count: capacity)
+        size = capacity * MemoryLayout<kinfo_proc>.stride
+        sysctl(&mib, 4, &procs, &size, nil, 0)
+        let count = size / MemoryLayout<kinfo_proc>.stride
+
+        var newCache: [PathKey: String] = [:]
+        var entries: [RawProcess] = []
+        entries.reserveCapacity(count)
+
+        for p in procs.prefix(count) {
+            let pid = p.kp_proc.p_pid
+            guard pid > 0 else { continue }
+
+            let key = PathKey(pid: pid, startSeconds: Int(p.kp_proc.p_un.__p_starttime.tv_sec))
+            let path: String
+            if let cached = pathCache[key] {
+                path = cached
+            } else {
+                var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+                let pathLen = proc_pidpath(pid, &pathBuffer, UInt32(pathBuffer.count))
+                path = pathLen > 0 ? String(cString: pathBuffer) : "-"
+            }
+            newCache[key] = path
+
+            let name: String
+            if path != "-" {
+                name = URL(fileURLWithPath: path).lastPathComponent
+            } else {
+                name = withUnsafeBytes(of: p.kp_proc.p_comm) { ptr -> String in
+                    String(cString: ptr.bindMemory(to: CChar.self).baseAddress!)
+                }
+            }
+            guard !name.isEmpty else { continue }
+
+            var taskInfo = proc_taskinfo()
+            let infoSize = Int32(MemoryLayout<proc_taskinfo>.size)
+            let ret = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &taskInfo, infoSize)
+            let hasMetrics = ret == infoSize
+
+            entries.append(RawProcess(
+                pid: pid,
+                parentPID: p.kp_eproc.e_ppid,
+                name: name,
+                path: path,
+                isStopped: Int32(p.kp_proc.p_stat) == SSTOP,
+                hasMetrics: hasMetrics,
+                memMB: hasMetrics ? Double(taskInfo.pti_resident_size) / 1_048_576.0 : 0,
+                totalTicks: hasMetrics ? taskInfo.pti_total_user + taskInfo.pti_total_system : 0
+            ))
+        }
+        pathCache = newCache
+        return ProcessSnapshot(timestamp: Date(), entries: entries)
     }
 }

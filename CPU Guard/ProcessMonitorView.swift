@@ -10,6 +10,7 @@ import SwiftUI
 struct ProcessMonitorView: View {
     @ObservedObject var monitor: ProcessMonitor
     @ObservedObject var daemonManager: DaemonManager
+    var onIconClick: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -38,7 +39,7 @@ struct ProcessMonitorView: View {
             // The real process table. Rows the app can't read directly (WindowServer, etc.)
             // get filled in by the privileged helper once it's registered — see
             // ProcessMonitor.applyHelperResults.
-            ContentView(monitor: monitor)
+            ContentView(monitor: monitor, onIconClick: onIconClick)
         }
         .frame(width: 800, height: 500)
     }

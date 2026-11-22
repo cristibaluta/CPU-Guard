@@ -158,6 +158,9 @@ struct MemoryAlertView: View {
         VStack(spacing: 0) {
             ForEach(engine.alerts) { alert in
                 HStack(spacing: 8) {
+                    // Badge only on the first row; other rows keep the space so they stay aligned.
+                    AppBadgeIcon()
+                        .opacity(alert.id == engine.alerts.first?.id ? 1 : 0)
                     Image(nsImage: appIcon(for: alert.bundleID))
                         .resizable()
                         .frame(width: 28, height: 28)
