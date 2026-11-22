@@ -7,13 +7,14 @@ import AppKit
 
 /// What is shown next to the icon in the menu bar.
 enum StatusDisplayMode: String, CaseIterable {
-    case none, values, charts
+    case none, values, charts, activeApp
 
     var title: String {
         switch self {
         case .none: return "None"
         case .values: return "CPU & Memory Values"
         case .charts: return "CPU & Memory Charts"
+        case .activeApp: return "Active App CPU & Memory"
         }
     }
 

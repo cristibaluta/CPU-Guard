@@ -53,6 +53,21 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _, _ in self?.setStatusIcon(alert: self?.isAlert ?? false) }
             .store(in: &cancellables)
+        monitor.$processes
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self, self.displayMode == .activeApp else { return }
+                self.setStatusIcon(alert: self.isAlert)
+            }
+            .store(in: &cancellables)
+        NSWorkspace.shared.notificationCenter
+            .publisher(for: NSWorkspace.didActivateApplicationNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self, self.displayMode == .activeApp else { return }
+                self.setStatusIcon(alert: self.isAlert)
+            }
+            .store(in: &cancellables)
         configurePopover()
         setupHogPanel()
         monitor.onNewHogDetected = { [weak self] in
@@ -70,6 +85,21 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
                 .sink { [weak self] isAlert in self?.setStatusIcon(alert: isAlert) }
                 .store(in: &cancellables)
         }
+    }
+
+    /// CPU and memory of the frontmost app, summed over all processes inside its bundle.
+    private func activeAppUsage() -> (name: String, cpu: Double, memoryMB: Double)? {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        let prefix = app.bundleURL.map { $0.path + "/" }
+        var cpu = 0.0
+        var mem = 0.0
+        for proc in monitor.processes {
+            if proc.id == app.processIdentifier || (prefix.map { proc.executablePath.hasPrefix($0) } ?? false) {
+                cpu += proc.cpuUsage
+                mem += proc.memoryMB
+            }
+        }
+        return (app.localizedName ?? "App", cpu, mem)
     }
 
     private func recordSample() {
@@ -103,6 +133,12 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             let memLine = NSMutableAttributedString(string: String(format: "%.1f GB | ", stats.memUsed / gb), attributes: attrs(baseColor))
             memLine.append(NSAttributedString(string: String(format: "%.1f GB", stats.swapUsed / gb), attributes: attrs(swapColor)))
             lines = [cpuLine, memLine]
+        } else if displayMode == .activeApp, let usage = activeAppUsage() {
+            let name = usage.name.count > 14 ? String(usage.name.prefix(13)) + "…" : usage.name
+            lines = [
+                NSAttributedString(string: String(format: "%@ · %.0f%%", name, usage.cpu), attributes: attrs(baseColor)),
+                NSAttributedString(string: formatMemory(usage.memoryMB), attributes: attrs(baseColor))
+            ]
         }
 
         let sizes = lines.map { $0.size() }
